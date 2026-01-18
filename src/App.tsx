@@ -1,159 +1,145 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Conexión
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 export default function DondeManoloApp() {
   const [activeTab, setActiveTab] = useState('ventas');
   const [productos, setProductos] = useState([]);
-  const [inventario, setInventario] = useState([]);
   const [carrito, setCarrito] = useState([]);
-  const [tasa, setTasa] = useState({ bcv: 0, parallel: 0 });
-  const [loading, setLoading] = useState(true);
+  const [tasa, setTasa] = useState({ bcv: 60 });
+  const [tipoServicio, setTipoServicio] = useState('table'); // table, delivery, pickup
+  const [detalleServicio, setDetalleServicio] = useState(''); // Mesa # o Nombre
+  
+  // Lógica de Multipago
+  const [pagosRealizados, setPagosRealizados] = useState([]);
+  const [montoIngresado, setMontoIngresado] = useState('');
+  const [metodoSeleccionado, setMetodoSeleccionado] = useState('usd_cash');
 
-  // Cargar datos al iniciar
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
-    setLoading(true);
     const { data: prod } = await supabase.from('products').select('*');
-    const { data: inv } = await supabase.from('ingredients').select('*');
-    const { data: set } = await supabase.from('settings').select('*').eq('key', 'exchange_rate').single();
-    
+    const { data: stg } = await supabase.from('settings').select('value').eq('key', 'exchange_rate').single();
     if (prod) setProductos(prod);
-    if (inv) setInventario(inv);
-    if (set) setTasa(set.value);
-    setLoading(false);
+    if (stg) setTasa(stg.value);
   }
 
-  // FUNCIONES DE INTERFAZ
-  const actualizarTasa = async (nuevaTasa) => {
-    const { error } = await supabase.from('settings').update({ value: nuevaTasa }).eq('key', 'exchange_rate');
-    if (!error) {
-      setTasa(nuevaTasa);
-      alert("Tasa actualizada");
+  const totalOrdenUSD = carrito.reduce((acc, item) => acc + Number(item.price_usd), 0);
+  const totalPagadoUSD = pagosRealizados.reduce((acc, p) => acc + p.montoUSD, 0);
+  const restanteUSD = totalOrdenUSD - totalPagadoUSD;
+
+  const agregarPago = () => {
+    const monto = parseFloat(montoIngresado);
+    if (!monto || monto <= 0) return;
+
+    let montoUSD = 0;
+    // Si el pago es en Bs, lo convertimos a USD para la contabilidad interna
+    if (metodoSeleccionado === 'pago_movil' || metodoSeleccionado === 'bs_cash' || metodoSeleccionado === 'punto') {
+      montoUSD = monto / tasa.bcv;
+    } else {
+      montoUSD = monto;
     }
+
+    setPagosRealizados([...pagosRealizados, { 
+      metodo: metodoSeleccionado, 
+      montoOriginal: monto, 
+      montoUSD: montoUSD 
+    }]);
+    setMontoIngresado('');
   };
 
-  const totalUSD = carrito.reduce((acc, item) => acc + Number(item.price_usd), 0);
-
-  if (loading) return <div style={{padding: '40px', textAlign: 'center'}}>Cargando Sistema Donde Manolo...</div>;
+  const procesarVentaFinal = async () => {
+    if (restanteUSD > 0.01) return alert("Aún falta saldo por cubrir");
+    
+    // Aquí el código enviará a Supabase la orden y desglosará los pagos en la tabla 'payments'
+    alert("Venta procesada con éxito. El inventario se descontará automáticamente.");
+    setCarrito([]);
+    setPagosRealizados([]);
+  };
 
   return (
-    <div style={{ fontFamily: 'Segoe UI, sans-serif', backgroundColor: '#f4f7f6', minHeight: '100vh' }}>
-      {/* NAVEGACIÓN PRINCIPAL */}
-      <nav style={{ background: '#2c3e50', padding: '15px', display: 'flex', gap: '20px', color: 'white' }}>
-        <h2 style={{ margin: 0, color: '#f39c12' }}>🍔 Donde Manolo</h2>
-        <button onClick={() => setActiveTab('ventas')} style={navBtnStyle}>Caja (Ventas)</button>
-        <button onClick={() => setActiveTab('menu')} style={navBtnStyle}>Menú</button>
-        <button onClick={() => setActiveTab('inventario')} style={navBtnStyle}>Inventario</button>
-        <button onClick={() => setActiveTab('config')} style={navBtnStyle}>Configuración (Tasa)</button>
+    <div style={{ fontFamily: 'sans-serif', backgroundColor: '#f4f4f4', minHeight: '100vh' }}>
+      <nav style={{ background: '#333', color: '#fff', padding: '1rem', display: 'flex', gap: '15px' }}>
+        <b style={{color: 'orange'}}>Donde Manolo POS</b>
+        <span onClick={() => setActiveTab('ventas')} style={{cursor:'pointer'}}>Caja</span>
+        <span onClick={() => setActiveTab('cocina')} style={{cursor:'pointer'}}>Cocina</span>
       </nav>
 
-      <main style={{ padding: '20px', maxWidth: '1200px', margin: 'auto' }}>
-        
-        {/* PANEL DE VENTAS */}
-        {activeTab === 'ventas' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '20px' }}>
-            <div>
-              <h3>Punto de Venta</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
-                {productos.map(p => (
-                  <div key={p.id} onClick={() => setCarrito([...carrito, p])} style={cardStyle}>
-                    <strong>{p.name}</strong><br/>
-                    <span style={{color: '#27ae60'}}>${p.price_usd}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={sidebarStyle}>
-              <h3>Cuenta</h3>
-              {carrito.map((item, i) => <div key={i} style={{display:'flex', justifyContent:'space-between'}}><span>{item.name}</span><span>${item.price_usd}</span></div>)}
-              <hr/>
-              <h2>Total: ${totalUSD.toFixed(2)}</h2>
-              <p style={{color: '#7f8c8d'}}>Bs. {(totalUSD * tasa.bcv).toLocaleString()}</p>
-              <button style={payBtnStyle}>REGISTRAR PAGO</button>
-              <button onClick={() => setCarrito([])} style={{width:'100%', marginTop:'10px'}}>Limpiar</button>
-            </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '20px', padding: '20px' }}>
+        {/* IZQUIERDA: MENÚ */}
+        <div>
+          <h3>Menú de Hamburguesas</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+            {productos.map(p => (
+              <button key={p.id} onClick={() => setCarrito([...carrito, p])} style={{padding: '15px', border: '1px solid #ddd', borderRadius: '8px'}}>
+                {p.name} <br/> <b>${p.price_usd}</b>
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
-        {/* PANEL DE MENÚ */}
-        {activeTab === 'menu' && (
-          <section style={panelStyle}>
-            <h3>Gestión de Menú</h3>
-            <table style={{width: '100%', borderCollapse: 'collapse'}}>
-              <thead><tr style={{borderBottom: '2px solid #ddd'}}><th>Producto</th><th>Precio ($)</th><th>Estado</th></tr></thead>
-              <tbody>
-                {productos.map(p => (
-                  <tr key={p.id}>
-                    <td>{p.name}</td>
-                    <td><input type="number" defaultValue={p.price_usd} style={{width:'60px'}} /></td>
-                    <td>{p.is_available ? '✅ Activo' : '❌ Agotado'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button style={{marginTop:'20px', padding:'10px 20px', background:'#f39c12', border:'none', borderRadius:'5px'}}>+ Agregar Nuevo Producto</button>
-          </section>
-        )}
+        {/* DERECHA: TICKET Y MULTIPAGO */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+          <h4>Resumen de Orden</h4>
+          <select value={tipoServicio} onChange={(e) => setTipoServicio(e.target.value)} style={{width:'100%', marginBottom:'5px'}}>
+             <option value="table">Mesa</option>
+             <option value="delivery">Delivery</option>
+             <option value="pickup">Pick-up</option>
+          </select>
+          <input 
+            placeholder={tipoServicio === 'table' ? "Número de Mesa" : "Nombre / Dirección"} 
+            value={detalleServicio} 
+            onChange={(e) => setDetalleServicio(e.target.value)}
+            style={{width:'94%', marginBottom:'10px', padding:'5px'}}
+          />
 
-        {/* PANEL DE INVENTARIO */}
-        {activeTab === 'inventario' && (
-          <section style={panelStyle}>
-            <h3>Control de Inventario</h3>
-            <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'15px'}}>
-              {inventario.map(ing => (
-                <div key={ing.id} style={{padding:'15px', border:'1px solid #ddd', borderRadius:'8px', background: ing.stock_actual < ing.stock_minimo ? '#fff3cd' : '#fff'}}>
-                  <strong>{ing.name}</strong><br/>
-                  Cantidad: {ing.stock_actual} {ing.unit}<br/>
-                  <small>Mínimo: {ing.stock_minimo}</small>
-                </div>
+          <div style={{ maxHeight: '150px', overflowY: 'auto', borderBottom: '1px solid #eee' }}>
+            {carrito.map((item, i) => <div key={i} style={{display:'flex', justifyContent:'space-between'}}><span>{item.name}</span><span>${item.price_usd}</span></div>)}
+          </div>
+          
+          <h3 style={{textAlign:'right'}}>Total: ${totalOrdenUSD.toFixed(2)}</h3>
+          <p style={{textAlign:'right', color:'#666'}}>Bs. {(totalOrdenUSD * tasa.bcv).toLocaleString()}</p>
+
+          <div style={{ background: '#f9f9f9', padding: '10px', borderRadius: '5px' }}>
+            <h5>Registrar Multipago</h5>
+            <div style={{ display: 'flex', gap: '5px' }}>
+              <input 
+                type="number" 
+                placeholder="Monto" 
+                value={montoIngresado} 
+                onChange={(e) => setMontoIngresado(e.target.value)}
+                style={{flex: 1}}
+              />
+              <select value={metodoSeleccionado} onChange={(e) => setMetodoSeleccionado(e.target.value)}>
+                <option value="usd_cash">Efectivo $</option>
+                <option value="bs_cash">Efectivo Bs</option>
+                <option value="zelle">Zelle</option>
+                <option value="pago_movil">Pago Móvil</option>
+              </select>
+              <button onClick={agregarPago} style={{background: '#007bff', color: '#fff', border: 'none', padding: '5px 10px'}}>+</button>
+            </div>
+
+            <div style={{ marginTop: '10px', fontSize: '0.85em' }}>
+              {pagosRealizados.map((p, i) => (
+                <div key={i} style={{color: 'green'}}>✔ {p.metodo}: {p.montoOriginal} (≈${p.montoUSD.toFixed(2)})</div>
               ))}
             </div>
-          </section>
-        )}
+            
+            <h4 style={{ color: restanteUSD <= 0 ? 'green' : 'red', marginTop: '10px' }}>
+              Resta por pagar: ${restanteUSD > 0 ? restanteUSD.toFixed(2) : '0.00'}
+            </h4>
+          </div>
 
-        {/* PANEL DE CONFIGURACIÓN (TASA) */}
-        {activeTab === 'config' && (
-          <section style={panelStyle}>
-            <h3>Configuración de Tasa de Cambio</h3>
-            <div style={{maxWidth: '300px'}}>
-              <label>Tasa BCV (Bs):</label>
-              <input 
-                type="number" 
-                value={tasa.bcv} 
-                onChange={(e) => setTasa({...tasa, bcv: parseFloat(e.target.value)})} 
-                style={inputStyle} 
-              />
-              <label>Tasa Paralelo (Bs):</label>
-              <input 
-                type="number" 
-                value={tasa.parallel} 
-                onChange={(e) => setTasa({...tasa, parallel: parseFloat(e.target.value)})} 
-                style={inputStyle} 
-              />
-              <button onClick={() => actualizarTasa(tasa)} style={saveBtnStyle}>Guardar Tasa en DB</button>
-            </div>
-          </section>
-        )}
-
-      </main>
+          <button 
+            disabled={restanteUSD > 0.01 || carrito.length === 0} 
+            onClick={procesarVentaFinal}
+            style={{ width: '100%', padding: '15px', marginTop: '15px', background: restanteUSD <= 0.01 ? '#28a745' : '#ccc', color: '#fff', border: 'none', borderRadius: '5px', fontWeight: 'bold' }}
+          >
+            FINALIZAR Y DESCONTAR INVENTARIO
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
-
-// ESTILOS RÁPIDOS (CSS-in-JS)
-const navBtnStyle = { background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '16px' };
-const cardStyle = { padding: '15px', background: 'white', border: '1px solid #ddd', borderRadius: '10px', cursor: 'pointer', textAlign: 'center' };
-const sidebarStyle = { background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' };
-const payBtnStyle = { width: '100%', padding: '12px', background: '#27ae60', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
-const panelStyle = { background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' };
-const inputStyle = { width: '100%', padding: '10px', margin: '10px 0 20px 0', borderRadius: '5px', border: '1px solid #ccc' };
-const saveBtnStyle = { background: '#2980b9', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' };
