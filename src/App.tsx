@@ -1,289 +1,614 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+// --- CONEXIÓN SUPABASE ---
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL || '', import.meta.env.VITE_SUPABASE_ANON_KEY || '');
 
+// --- TIPOS Y ESTADOS ---
 export default function DondeManoloApp() {
+  // Sesión y Navegación
   const [currentUser, setCurrentUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('');
-  const [staff, setStaff] = useState([]);
-  const [productos, setProductos] = useState([]);
-  const [inventario, setInventario] = useState([]);
-  const [tasa, setTasa] = useState({ bcv: 0 });
-  const [orders, setOrders] = useState([]);
+  const [activeTab, setActiveTab] = useState('login'); // login, dashboard, pos_mesero, pos_caja, cocina, inventario
   const [loading, setLoading] = useState(false);
 
-  // ESTADO CARRITO (Mesero y Cajera)
+  // Datos Maestros
+  const [staff, setStaff] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [ingredientes, setIngredientes] = useState([]);
+  const [tasa, setTasa] = useState(0); // Tasa BCV actual
+
+  // Operativos
+  const [orders, setOrders] = useState([]);
   const [carrito, setCarrito] = useState([]);
-  const [tipoServicio, setTipoServicio] = useState('Mesa');
-  const [detalleServicio, setDetalleServicio] = useState('');
+  const [serviceDetails, setServiceDetails] = useState({ type: 'Mesa', info: '' });
 
-  // ESTADO MULTIPAGO (Caja)
+  // Caja / Multipago
   const [orderToPay, setOrderToPay] = useState(null);
-  const [pagos, setPagos] = useState([]);
+  const [pagosActuales, setPagosActuales] = useState([]); // [{method, amount_usd, amount_bs}]
   const [montoInput, setMontoInput] = useState('');
-  const [metodo, setMetodo] = useState('usd_cash');
-  const [refPago, setRefPago] = useState('');
+  const [metodoPago, setMetodoPago] = useState('usd_efectivo');
 
-  // ESTADO REPORTES Y COMPRAS (Admin)
-  const [reporteHoy, setReporteHoy] = useState(null);
-  const [nuevaCompra, setNuevaCompra] = useState({ ingrediente: '', cant: '', costo: '' });
+  // Reportes y Admin
+  const [rangoFechas, setRangoFechas] = useState({ inicio: new Date().toISOString().split('T')[0], fin: new Date().toISOString().split('T')[0] });
+  const [reporteData, setReporteData] = useState(null);
+  const [nuevoGasto, setNuevoGasto] = useState({ desc: '', monto: '', cat: 'Varios' });
+  const [nuevaCompra, setNuevaCompra] = useState({ ing: '', cant: '', costo: '' });
+  const [nuevoEmpleado, setNuevoEmpleado] = useState({ name: '', role: 'mesero', pin: '' });
 
+  // --- EFECTOS INICIALES ---
   useEffect(() => {
     fetchStaff();
+    fetchSettings();
+  }, []);
+
+  useEffect(() => {
     if (currentUser) {
-      fetchData();
-      const interval = setInterval(fetchOrders, 10000); // Refresco cada 10s
-      return () => clearInterval(interval);
+      fetchProducts();
+      if (['admin', 'caja', 'cocina'].includes(currentUser.role)) {
+        fetchOrders(); // Carga inicial
+        const interval = setInterval(fetchOrders, 10000); // Refresco tiempo real
+        return () => clearInterval(interval);
+      }
     }
   }, [currentUser]);
 
-  async function fetchStaff() {
+  // --- FUNCIONES DE BASE DE DATOS ---
+  const fetchStaff = async () => {
     const { data } = await supabase.from('staff').select('*').eq('active', true);
     if (data) setStaff(data);
-  }
+  };
 
-  async function fetchData() {
-    setLoading(true);
+  const fetchSettings = async () => {
+    const { data } = await supabase.from('settings').select('value').eq('key', 'exchange_rate').single();
+    if (data) setTasa(data.value.bcv || 0);
+  };
+
+  const fetchProducts = async () => {
     const { data: p } = await supabase.from('products').select('*').order('name');
     const { data: i } = await supabase.from('ingredients').select('*').order('name');
-    const { data: t } = await supabase.from('settings').select('value').eq('key', 'exchange_rate').single();
     if (p) setProductos(p);
-    if (i) setInventario(i);
-    if (t) setTasa(t.value);
-    await fetchOrders();
-    setLoading(false);
-  }
+    if (i) setIngredientes(i);
+  };
 
-  async function fetchOrders() {
-    const { data } = await supabase.from('orders').select('*, order_items(*, product:products(name))').order('created_at', { ascending: false });
+  const fetchOrders = async () => {
+    const hoy = new Date().toISOString().split('T')[0];
+    let query = supabase.from('orders')
+      .select('*, order_items(*, product:products(name)), payments(*)')
+      .order('created_at', { ascending: false });
+    
+    // Mesero no necesita ver historial de días anteriores en esta carga masiva
+    if (currentUser?.role === 'cocina') query = query.eq('status', 'pendiente');
+    
+    const { data } = await query;
     if (data) setOrders(data);
-  }
+  };
 
-  // --- LÓGICA DE ENVÍO DE PEDIDO (Mesero) ---
-  const enviarPedido = async () => {
-    if (carrito.length === 0) return alert("El carrito está vacío");
-    if (!detalleServicio) return alert("Indique número de mesa o nombre del cliente");
+  // --- LÓGICA DE USUARIO ---
+  const handleLogin = (pinAttempt) => {
+    const user = staff.find(u => u.pin === pinAttempt);
+    if (user) {
+      setCurrentUser(user);
+      if (tasa === 0 && user.role === 'admin') {
+        alert("⚠️ ATENCIÓN: La tasa de cambio es 0. Por favor configúrela inmediatamente.");
+        setActiveTab('dashboard');
+      } else if (user.role === 'admin') setActiveTab('dashboard');
+      else if (user.role === 'caja') setActiveTab('pos_caja');
+      else if (user.role === 'mesero') setActiveTab('pos_mesero');
+      else if (user.role === 'cocina') setActiveTab('cocina');
+    } else {
+      alert("PIN Incorrecto");
+    }
+  };
+
+  // --- MESERO: TOMA DE PEDIDOS ---
+  const addToCart = (product) => {
+    // Estructura de item en carrito
+    const item = {
+      ...product,
+      tempId: Date.now() + Math.random(),
+      notes: ''
+    };
+    setCarrito([...carrito, item]);
+  };
+
+  const sendOrder = async () => {
+    if (carrito.length === 0) return alert("Carrito vacío");
+    if (!serviceDetails.info) return alert("Indique mesa o cliente");
+
     setLoading(true);
     try {
-      const { data: order, error: errO } = await supabase.from('orders').insert([{
-        total_usd: carrito.reduce((acc, item) => acc + Number(item.price_usd), 0),
-        service_type: tipoServicio,
-        table_number: tipoServicio === 'Mesa' ? detalleServicio : null,
-        customer_name: tipoServicio !== 'Mesa' ? detalleServicio : null,
+      // 1. Crear Orden
+      const { data: order, error } = await supabase.from('orders').insert([{
+        total_usd: carrito.reduce((sum, item) => sum + item.price_usd, 0),
         status: 'pendiente',
-        created_by: currentUser.name
+        service_type: serviceDetails.type,
+        table_number: serviceDetails.type === 'Mesa' ? serviceDetails.info : null,
+        customer_name: serviceDetails.type !== 'Mesa' ? serviceDetails.info : null,
+        created_by: currentUser.name,
+        exchange_rate: tasa // Tasa Congelada Inicial
       }]).select().single();
 
-      if (errO) throw errO;
+      if (error) throw error;
 
-      const items = carrito.map(p => ({
+      // 2. Crear Items
+      const itemsToInsert = carrito.map(item => ({
         order_id: order.id,
-        product_id: p.id,
+        product_id: item.id,
         quantity: 1,
-        price_at_time: p.price_usd,
-        notes: p.nota || ''
+        price_at_time: item.price_usd,
+        notes: item.notes
       }));
 
-      const { error: errI } = await supabase.from('order_items').insert(items);
-      if (errI) throw errI;
+      await supabase.from('order_items').insert(itemsToInsert);
 
-      alert("🚀 Pedido enviado a Cocina");
-      setCarrito([]); setDetalleServicio('');
-      if (currentUser.role === 'caja') setActiveTab('caja');
+      alert("Pedido enviado a cocina 👨‍🍳");
+      setCarrito([]);
+      setServiceDetails({ type: 'Mesa', info: '' });
       fetchOrders();
-    } catch (e) { alert("Error: " + e.message); }
-    finally { setLoading(false); }
+    } catch (error) {
+      alert("Error enviando pedido: " + error.message);
+    }
+    setLoading(false);
   };
 
-  // --- LÓGICA DE COBRO (Caja) ---
-  const totalPagadoUSD = pagos.reduce((acc, p) => acc + p.montoUSD, 0);
-  const deudaRestanteUSD = orderToPay ? orderToPay.total_usd - totalPagadoUSD : 0;
+  // --- COCINA ---
+  const markReady = async (orderId) => {
+    await supabase.from('orders').update({ status: 'listo' }).eq('id', orderId);
+    fetchOrders();
+  };
+
+  // --- CAJA: MULTIPAGO Y CÁLCULOS ---
+  const iniciarCobro = (order) => {
+    setOrderToPay(order);
+    setPagosActuales([]);
+    // Si la orden ya tenía tasa (ej: creada hace horas), usamos esa. Si no, la actual.
+    // NOTA: Para este requerimiento, usamos la tasa actual para calcular la conversión AHORA,
+    // pero guardaremos la tasa final en el pago.
+  };
 
   const agregarPago = () => {
-    const m = parseFloat(montoInput);
-    if (!m && metodo !== 'cortesia') return;
-    let usd = (metodo === 'usd_cash' || metodo === 'zelle') ? m : (metodo === 'cortesia' ? deudaRestanteUSD : m / tasa.bcv);
-    setPagos([...pagos, { metodo, montoUSD: usd, montoOriginal: m, detalle: refPago }]);
-    setMontoInput(''); setRefPago('');
+    const val = parseFloat(montoInput);
+    if (!val && metodoPago !== 'obsequio') return;
+
+    let montoUSD = 0;
+    // Conversión a USD según metodo
+    if (metodoPago === 'obsequio') {
+        // Obsequio cubre todo el restante
+        const pagado = pagosActuales.reduce((acc, p) => acc + p.amount_usd, 0);
+        montoUSD = orderToPay.total_usd - pagado;
+    } else if (['bs_efectivo', 'pago_movil', 'punto'].includes(metodoPago)) {
+        montoUSD = val / tasa;
+    } else {
+        montoUSD = val; // usd_efectivo, zelle
+    }
+
+    setPagosActuales([...pagosActuales, {
+        method: metodoPago,
+        amount_original: metodoPago === 'obsequio' ? 0 : val,
+        amount_usd: montoUSD
+    }]);
+    setMontoInput('');
   };
 
-  // --- RENDER ---
+  const finalizarVenta = async () => {
+    const totalPagado = pagosActuales.reduce((acc, p) => acc + p.amount_usd, 0);
+    const esObsequio = pagosActuales.some(p => p.method === 'obsequio');
+    
+    // Validación de margen de error pequeño por decimales
+    if (totalPagado < orderToPay.total_usd - 0.05 && !esObsequio) {
+        return alert("El monto no cubre la cuenta");
+    }
+
+    setLoading(true);
+    try {
+        // 1. Guardar Pagos
+        const inserts = pagosActuales.map(p => ({
+            order_id: orderToPay.id,
+            method: p.method,
+            amount_usd: p.amount_usd,
+            amount_original: p.amount_original,
+            exchange_rate: tasa // TASA CONGELADA AL MOMENTO DEL PAGO
+        }));
+        await supabase.from('payments').insert(inserts);
+
+        // 2. Cerrar Orden (El Trigger SQL descontará inventario)
+        await supabase.from('orders').update({
+            status: 'pagado',
+            is_courtesy: esObsequio,
+            exchange_rate: tasa // Actualizamos la tasa de cierre de la orden
+        }).eq('id', orderToPay.id);
+
+        alert("Venta procesada exitosamente 💰");
+        setOrderToPay(null);
+        setPagosActuales([]);
+        fetchOrders();
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
+    setLoading(false);
+  };
+
+  // Cálculos de vuelto
+  const totalAbonadoUSD = pagosActuales.reduce((acc, p) => acc + p.amount_usd, 0);
+  const restanteUSD = orderToPay ? orderToPay.total_usd - totalAbonadoUSD : 0;
+  const restanteBS = restanteUSD * tasa;
+
+  // --- ADMIN: INVENTARIO Y GASTOS ---
+  const registrarCompra = async () => {
+    if(!nuevaCompra.ing || !nuevaCompra.cant) return;
+    await supabase.from('purchases').insert([{
+        ingredient_name: nuevaCompra.ing,
+        quantity: nuevaCompra.cant,
+        cost_usd: nuevaCompra.costo,
+        created_by: currentUser.name
+    }]);
+    alert("Compra registrada. Stock actualizado.");
+    setNuevaCompra({ing:'', cant:'', costo:''});
+    fetchProducts(); // Refrescar stock visual
+  };
+
+  const registrarGasto = async () => {
+    await supabase.from('expenses').insert([{
+        description: nuevoGasto.desc,
+        amount_usd: nuevoGasto.monto,
+        category: nuevoGasto.cat,
+        created_by: currentUser.name
+    }]);
+    alert("Gasto registrado");
+    setNuevoGasto({desc:'', monto:'', cat:'Varios'});
+  };
+
+  // --- REPORTES ---
+  const generarReporte = async () => {
+    // Buscar órdenes pagadas en rango
+    const { data: ventas } = await supabase.from('orders')
+        .select('*, payments(*)')
+        .gte('created_at', rangoFechas.inicio + 'T00:00:00')
+        .lte('created_at', rangoFechas.fin + 'T23:59:59')
+        .eq('status', 'pagado');
+
+    const { data: gastos } = await supabase.from('expenses')
+        .gte('created_at', rangoFechas.inicio + 'T00:00:00')
+        .lte('created_at', rangoFechas.fin + 'T23:59:59');
+
+    if (!ventas) return;
+
+    // Consolidación de Totales por Método
+    const totales = {
+        total_venta_usd: 0,
+        metodos: {
+            usd_efectivo: 0,
+            bs_efectivo: 0,
+            zelle: 0,
+            pago_movil: 0,
+            punto: 0,
+            obsequio: 0
+        },
+        gastos_usd: gastos ? gastos.reduce((a,b)=>a+b.amount_usd, 0) : 0,
+        conteo: ventas.length
+    };
+
+    ventas.forEach(orden => {
+        totales.total_venta_usd += orden.total_usd;
+        orden.payments.forEach(pago => {
+            if (totales.metodos[pago.method] !== undefined) {
+                // Sumamos el monto original reportado (ej: Bs si fue Bs)
+                totales.metodos[pago.method] += pago.amount_original > 0 ? pago.amount_original : pago.amount_usd; 
+            }
+        });
+    });
+
+    setReporteData({ ventas, totales, rango: rangoFechas });
+  };
+
+  // --- INTERFAZ (RENDER) ---
   if (!currentUser) return (
-    <div style={{height:'100vh', background:'#b22222', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'white'}}>
-      <h1 style={{fontSize:'3em'}}>🍔 DONDE MANOLO</h1>
-      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'15px', maxWidth:'600px'}}>
-        {staff.map(u => (
-          <button key={u.id} onClick={() => {
-            const pin = prompt(`PIN para ${u.name}:`);
-            if(pin === u.pin) {
-              setCurrentUser(u);
-              if(u.role === 'mesero') setActiveTab('tomar_pedido');
-              else if(u.role === 'cocina') setActiveTab('cocina');
-              else if(u.role === 'caja') setActiveTab('caja');
-              else setActiveTab('dashboard');
-            } else alert("PIN incorrecto");
-          }} style={btnBig}>{u.name}<br/><small>{u.role.toUpperCase()}</small></button>
-        ))}
-      </div>
+    <div style={styles.loginContainer}>
+        <h1 style={styles.title}>DONDE MANOLO</h1>
+        <p>Sistema de Gestión</p>
+        <div style={styles.pinGrid}>
+            {staff.map(u => (
+                <button key={u.id} onClick={() => handleLogin(prompt(`Ingrese PIN para ${u.name}:`))} style={styles.userBtn}>
+                    {u.name} <br/><small>{u.role.toUpperCase()}</small>
+                </button>
+            ))}
+        </div>
     </div>
   );
 
   return (
-    <div className="notranslate" style={{fontFamily:'sans-serif', background:'#f4f4f4', minHeight:'100vh'}}>
-      <nav className="no-print" style={{background:'#333', color:'white', padding:'15px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <b>{currentUser.name}</b>
-        <div style={{display:'flex', gap:'10px'}}>
-          {currentUser.role === 'mesero' && <button onClick={()=>setActiveTab('tomar_pedido')} style={navBtn}>Nuevo Pedido</button>}
-          {currentUser.role === 'caja' && <><button onClick={()=>setActiveTab('caja')} style={navBtn}>Caja</button><button onClick={()=>setActiveTab('tomar_pedido')} style={navBtn}>+ Delivery/Llevar</button></>}
-          {currentUser.role === 'admin' && <><button onClick={()=>setActiveTab('dashboard')} style={navBtn}>Dashboard</button><button onClick={()=>setActiveTab('inventario')} style={navBtn}>Inventario</button></>}
-          {currentUser.role === 'cocina' && <button onClick={()=>setActiveTab('cocina')} style={navBtn}>Cocina</button>}
-          <button onClick={()=>window.print()} style={{...navBtn, color:'#4caf50'}}>🖨️ Imprimir</button>
-          <button onClick={()=>window.location.reload()} style={{...navBtn, color:'orange'}}>Cerrar Sesión</button>
+    <div className="notranslate" style={styles.mainContainer}>
+        {/* NAVBAR */}
+        <nav style={styles.navbar} className="no-print">
+            <div>Hola, <b>{currentUser.name}</b></div>
+            <div style={{display:'flex', gap:'10px'}}>
+                {currentUser.role === 'admin' && (
+                    <>
+                        <button onClick={()=>setActiveTab('dashboard')} style={styles.navBtn}>📊 Dashboard</button>
+                        <button onClick={()=>setActiveTab('inventario')} style={styles.navBtn}>📦 Inventario</button>
+                        <button onClick={()=>setActiveTab('personal')} style={styles.navBtn}>👥 Personal</button>
+                    </>
+                )}
+                {(currentUser.role === 'caja' || currentUser.role === 'admin') && (
+                    <button onClick={()=>setActiveTab('pos_caja')} style={styles.navBtn}>💰 Caja</button>
+                )}
+                <button onClick={()=>setActiveTab('pos_mesero')} style={styles.navBtn}>📝 Pedidos</button>
+                <button onClick={()=>setActiveTab('cocina')} style={styles.navBtn}>👨‍🍳 Cocina</button>
+                <button onClick={()=>window.print()} style={{...styles.navBtn, background:'#444'}}>🖨️ Imprimir</button>
+                <button onClick={()=>window.location.reload()} style={{...styles.navBtn, background:'red'}}>Salir</button>
+            </div>
+        </nav>
+
+        <div style={styles.content}>
+            
+            {/* VISTA: DASHBOARD ADMIN */}
+            {activeTab === 'dashboard' && currentUser.role === 'admin' && (
+                <div style={styles.grid2}>
+                    <div style={styles.card}>
+                        <h3>⚙️ Configuración Diaria</h3>
+                        <div style={{padding:'10px', background:'#fff3cd', border:'1px solid #ffeeba'}}>
+                            <label>Tasa BCV del Día:</label>
+                            <input type="number" value={tasa} onChange={e=>setTasa(parseFloat(e.target.value))} style={styles.input} />
+                            <button onClick={async ()=>{
+                                await supabase.from('settings').upsert({key:'exchange_rate', value:{bcv: tasa}});
+                                alert("Tasa actualizada");
+                            }} style={styles.actionBtn}>Guardar Tasa</button>
+                        </div>
+                    </div>
+                    <div style={styles.card}>
+                        <h3>📈 Reportes Gerenciales</h3>
+                        <div style={{display:'flex', gap:'5px'}}>
+                            <input type="date" value={rangoFechas.inicio} onChange={e=>setRangoFechas({...rangoFechas, inicio:e.target.value})} style={styles.input}/>
+                            <input type="date" value={rangoFechas.fin} onChange={e=>setRangoFechas({...rangoFechas, fin:e.target.value})} style={styles.input}/>
+                        </div>
+                        <button onClick={generarReporte} style={styles.actionBtn}>Generar Reporte</button>
+                    </div>
+                    {reporteData && (
+                        <div style={{...styles.card, gridColumn:'span 2'}} id="print-area">
+                            <center><h2>DONDE MANOLO - REPORTE DE GESTIÓN</h2></center>
+                            <p>Del {reporteData.rango.inicio} al {reporteData.rango.fin}</p>
+                            <hr/>
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr'}}>
+                                <div>
+                                    <h4>Ingresos por Método:</h4>
+                                    <p>💵 $ Efectivo: <b>${reporteData.totales.metodos.usd_efectivo.toFixed(2)}</b></p>
+                                    <p>💵 Bs Efectivo: <b>Bs {reporteData.totales.metodos.bs_efectivo.toFixed(2)}</b></p>
+                                    <p>📱 Pago Móvil: <b>Bs {reporteData.totales.metodos.pago_movil.toFixed(2)}</b></p>
+                                    <p>💳 Punto Venta: <b>Bs {reporteData.totales.metodos.punto.toFixed(2)}</b></p>
+                                    <p>🏦 Zelle: <b>${reporteData.totales.metodos.zelle.toFixed(2)}</b></p>
+                                    <p>🎁 Obsequios: <b>${reporteData.totales.metodos.obsequio.toFixed(2)}</b></p>
+                                </div>
+                                <div style={{textAlign:'right'}}>
+                                    <h4>Resumen:</h4>
+                                    <p>Total Ventas (Valor USD): <b>${reporteData.totales.total_venta_usd.toFixed(2)}</b></p>
+                                    <p>Total Gastos: <b style={{color:'red'}}>-${reporteData.totales.gastos_usd.toFixed(2)}</b></p>
+                                    <h3>Balance: ${(reporteData.totales.total_venta_usd - reporteData.totales.gastos_usd).toFixed(2)}</h3>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* VISTA: POS MESERO / CAJERA (Toma de pedidos) */}
+            {activeTab === 'pos_mesero' && (
+                <div style={styles.grid2}>
+                    <div style={{overflowY:'auto', maxHeight:'80vh'}}>
+                        <h3>🍔 Menú</h3>
+                        <div style={styles.productGrid}>
+                            {productos.map(p => (
+                                <div key={p.id} onClick={()=>addToCart(p)} style={styles.productCard}>
+                                    <b>{p.name}</b><br/>${p.price_usd}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div style={styles.card}>
+                        <h3>📝 Nueva Orden</h3>
+                        <select style={styles.input} value={serviceDetails.type} onChange={e=>setServiceDetails({...serviceDetails, type:e.target.value})}>
+                            <option>Mesa</option><option>Delivery</option><option>Pickup</option>
+                        </select>
+                        <input placeholder="Nro Mesa o Nombre Cliente" value={serviceDetails.info} onChange={e=>setServiceDetails({...serviceDetails, info:e.target.value})} style={styles.input} />
+                        
+                        <div style={{borderTop:'1px solid #eee', marginTop:'10px', maxHeight:'40vh', overflowY:'auto'}}>
+                            {carrito.map(item => (
+                                <div key={item.tempId} style={{padding:'10px', borderBottom:'1px solid #eee'}}>
+                                    <div style={{display:'flex', justifyContent:'space-between'}}>
+                                        <b>{item.name}</b>
+                                        <span onClick={()=>setCarrito(carrito.filter(c=>c.tempId!==item.tempId))} style={{color:'red', cursor:'pointer'}}>✖</span>
+                                    </div>
+                                    <input 
+                                        placeholder="Nota: Sin cebolla, extra queso..." 
+                                        value={item.notes} 
+                                        onChange={e => setCarrito(carrito.map(c => c.tempId===item.tempId ? {...c, notes:e.target.value} : c))}
+                                        style={{...styles.input, fontSize:'0.8em', marginTop:'5px'}} 
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                        <h3 style={{textAlign:'right'}}>Total: ${carrito.reduce((a,b)=>a+b.price_usd,0).toFixed(2)}</h3>
+                        <button onClick={sendOrder} disabled={loading} style={styles.actionBtn}>
+                            {loading ? 'Enviando...' : 'ENVIAR A COCINA'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* VISTA: CAJA (Cobro) */}
+            {activeTab === 'pos_caja' && (
+                <div style={styles.grid2}>
+                    <div style={styles.card}>
+                        <h3>📄 Órdenes Pendientes de Pago</h3>
+                        {orders.filter(o => o.status !== 'pagado').map(o => (
+                            <div key={o.id} onClick={()=>iniciarCobro(o)} style={{
+                                padding:'10px', borderBottom:'1px solid #ccc', cursor:'pointer',
+                                background: o.status === 'listo' ? '#d4edda' : '#fff'
+                            }}>
+                                <div style={{display:'flex', justifyContent:'space-between'}}>
+                                    <span>{o.service_type}: {o.table_number || o.customer_name}</span>
+                                    <b>${o.total_usd}</b>
+                                </div>
+                                <small style={{color: o.status==='listo'?'green':'orange'}}>{o.status.toUpperCase()}</small>
+                            </div>
+                        ))}
+                    </div>
+
+                    {orderToPay && (
+                        <div style={styles.card}>
+                            <h3>Cobrar: {orderToPay.customer_name || orderToPay.table_number}</h3>
+                            <div style={{textAlign:'center', padding:'10px', background:'#f8f9fa', borderRadius:'5px'}}>
+                                <h2 style={{margin:0}}>Total: ${orderToPay.total_usd.toFixed(2)}</h2>
+                                <h4 style={{margin:0}}>({(orderToPay.total_usd * tasa).toFixed(2)} Bs)</h4>
+                            </div>
+
+                            <div style={{marginTop:'20px'}}>
+                                <p style={{fontWeight:'bold', color: restanteUSD > 0.05 ? 'red' : 'green'}}>
+                                    {restanteUSD > 0 ? 'Faltan' : 'Vuelto'}: ${Math.abs(restanteUSD).toFixed(2)} 
+                                    <span style={{color:'gray', fontSize:'0.8em'}}> (Bs {Math.abs(restanteBS).toFixed(2)})</span>
+                                </p>
+                                
+                                <div style={{display:'flex', gap:'5px'}}>
+                                    <input type="number" placeholder="Monto" value={montoInput} onChange={e=>setMontoInput(e.target.value)} style={{width:'80px', padding:'5px'}}/>
+                                    <select value={metodoPago} onChange={e=>setMetodoPago(e.target.value)} style={{flex:1, padding:'5px'}}>
+                                        <option value="usd_efectivo">$ Efectivo</option>
+                                        <option value="bs_efectivo">Bs Efectivo</option>
+                                        <option value="pago_movil">Pago Móvil</option>
+                                        <option value="punto">Punto</option>
+                                        <option value="zelle">Zelle</option>
+                                        {(currentUser.role === 'admin' || currentUser.role === 'caja') && <option value="obsequio">Obsequio</option>}
+                                    </select>
+                                    <button onClick={agregarPago} style={{background:'black', color:'white', border:'none', borderRadius:'5px'}}>+</button>
+                                </div>
+
+                                <ul style={{listStyle:'none', padding:0, marginTop:'10px'}}>
+                                    {pagosActuales.map((p, i) => (
+                                        <li key={i} style={{display:'flex', justifyContent:'space-between', fontSize:'0.9em', borderBottom:'1px solid #eee'}}>
+                                            <span>{p.method}</span>
+                                            <span>${p.amount_usd.toFixed(2)}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+
+                                <button onClick={finalizarVenta} style={styles.actionBtn}>CERRAR CUENTA</button>
+                                <button onClick={()=>setOrderToPay(null)} style={{...styles.actionBtn, background:'#6c757d', marginTop:'5px'}}>Cancelar</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* VISTA: COCINA */}
+            {activeTab === 'cocina' && (
+                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(250px, 1fr))', gap:'15px'}}>
+                    {orders.filter(o => o.status === 'pendiente').map(o => (
+                        <div key={o.id} style={{background:'white', borderLeft:'6px solid orange', padding:'15px', borderRadius:'5px', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
+                            <h3>{o.service_type} - {o.table_number || o.customer_name}</h3>
+                            <ul style={{paddingLeft:'20px'}}>
+                                {o.order_items.map(item => (
+                                    <li key={item.id} style={{marginBottom:'5px'}}>
+                                        <b>{item.product.name}</b>
+                                        {item.notes && <div style={{background:'yellow', padding:'2px', fontSize:'0.9em'}}>⚠️ {item.notes}</div>}
+                                    </li>
+                                ))}
+                            </ul>
+                            <button onClick={()=>markReady(o.id)} style={styles.actionBtn}>LISTO PARA ENTREGAR ✅</button>
+                        </div>
+                    ))}
+                    {orders.filter(o=>o.status==='pendiente').length === 0 && <p>No hay pedidos pendientes 👨‍🍳</p>}
+                </div>
+            )}
+
+            {/* VISTA: INVENTARIO Y GASTOS */}
+            {activeTab === 'inventario' && (
+                <div style={styles.grid2}>
+                    <div style={styles.card}>
+                        <h3>📦 Inventario Vivo</h3>
+                        <table style={{width:'100%', borderCollapse:'collapse'}}>
+                            <thead><tr style={{textAlign:'left'}}><th>Ingrediente</th><th>Stock</th><th>Uni</th></tr></thead>
+                            <tbody>
+                                {ingredientes.map(i => (
+                                    <tr key={i.id} style={{borderBottom:'1px solid #eee'}}>
+                                        <td>{i.name}</td>
+                                        <td style={{fontWeight:'bold', color: i.stock < 10 ? 'red':'black'}}>{Number(i.stock).toFixed(2)}</td>
+                                        <td>{i.unit}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style={{display:'flex', flexDirection:'column', gap:'20px'}}>
+                        <div style={styles.card}>
+                            <h3>🛒 Cargar Compra</h3>
+                            <select style={styles.input} onChange={e=>setNuevaCompra({...nuevaCompra, ing:e.target.value})}>
+                                <option value="">Seleccione...</option>
+                                {ingredientes.map(i=><option key={i.id} value={i.name}>{i.name}</option>)}
+                            </select>
+                            <input placeholder="Cantidad" type="number" value={nuevaCompra.cant} onChange={e=>setNuevaCompra({...nuevaCompra, cant:e.target.value})} style={styles.input}/>
+                            <input placeholder="Costo Total $" type="number" value={nuevaCompra.costo} onChange={e=>setNuevaCompra({...nuevaCompra, costo:e.target.value})} style={styles.input}/>
+                            <button onClick={registrarCompra} style={styles.actionBtn}>Registrar Ingreso</button>
+                        </div>
+                        <div style={styles.card}>
+                            <h3>💸 Registrar Gasto</h3>
+                            <input placeholder="Descripción" value={nuevoGasto.desc} onChange={e=>setNuevoGasto({...nuevoGasto, desc:e.target.value})} style={styles.input}/>
+                            <input placeholder="Monto USD" type="number" value={nuevoGasto.monto} onChange={e=>setNuevoGasto({...nuevoGasto, monto:e.target.value})} style={styles.input}/>
+                            <button onClick={registrarGasto} style={{...styles.actionBtn, background:'#dc3545'}}>Registrar Egreso</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* VISTA: GESTIÓN PERSONAL */}
+            {activeTab === 'personal' && currentUser.role === 'admin' && (
+                 <div style={styles.card}>
+                    <h3>Gestión de Usuarios</h3>
+                    <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
+                        <input placeholder="Nombre" value={nuevoEmpleado.name} onChange={e=>setNuevoEmpleado({...nuevoEmpleado, name:e.target.value})} style={styles.input}/>
+                        <select value={nuevoEmpleado.role} onChange={e=>setNuevoEmpleado({...nuevoEmpleado, role:e.target.value})} style={styles.input}>
+                            <option value="mesero">Mesero</option><option value="caja">Caja</option><option value="cocina">Cocina</option><option value="admin">Admin</option>
+                        </select>
+                        <input placeholder="PIN" value={nuevoEmpleado.pin} onChange={e=>setNuevoEmpleado({...nuevoEmpleado, pin:e.target.value})} style={styles.input}/>
+                        <button onClick={async ()=>{
+                            await supabase.from('staff').insert([nuevoEmpleado]);
+                            setNuevoEmpleado({name:'', role:'mesero', pin:''});
+                            fetchStaff();
+                            alert("Usuario Creado");
+                        }} style={styles.actionBtn}>Crear</button>
+                    </div>
+                    <ul>
+                        {staff.map(s => <li key={s.id}>{s.name} - {s.role} (PIN: ****)</li>)}
+                    </ul>
+                 </div>
+            )}
+
         </div>
-      </nav>
-
-      <div style={{padding:'20px', maxWidth:'1200px', margin:'auto'}}>
-
-        {/* VISTA: TOMAR PEDIDO (Mesero y Cajera) */}
-        {activeTab === 'tomar_pedido' && (
-          <div style={{display:'grid', gridTemplateColumns:'2fr 1fr', gap:'20px'}}>
-            <div>
-              <h3>Menú</h3>
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(130px, 1fr))', gap:'10px'}}>
-                {productos.map(p => (
-                  <div key={p.id} onClick={() => setCarrito([...carrito, {...p, nota: '', tmp: Date.now()+Math.random()}])} style={card}>
-                    <b>{p.name}</b><br/><span style={{color:'green'}}>${p.price_usd}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={panel}>
-              <h3>Orden Nueva</h3>
-              <select style={input} value={tipoServicio} onChange={e=>setTipoServicio(e.target.value)}><option>Mesa</option><option>Delivery</option><option>Llevar</option></select>
-              <input placeholder="Mesa # o Cliente" style={input} value={detalleServicio} onChange={e=>setDetalleServicio(e.target.value)} />
-              <div style={{maxHeight:'300px', overflowY:'auto'}}>
-                {carrito.map(item => (
-                  <div key={item.tmp} style={{borderBottom:'1px solid #eee', marginBottom:'10px', paddingBottom:'5px'}}>
-                    <div style={{display:'flex', justifyContent:'space-between'}}><b>{item.name}</b> <span onClick={()=>setCarrito(carrito.filter(x=>x.tmp!==item.tmp))} style={{color:'red', cursor:'pointer'}}>X</span></div>
-                    <input placeholder="Nota (ej. sin cebolla)" value={item.nota} onChange={e=>setCarrito(carrito.map(x=>x.tmp===item.tmp?{...x, nota:e.target.value}:x))} style={{width:'100%', fontSize:'0.8em'}} />
-                  </div>
-                ))}
-              </div>
-              <h3 style={{textAlign:'right'}}>Total: ${carrito.reduce((a,b)=>a+Number(b.price_usd),0).toFixed(2)}</h3>
-              <button onClick={enviarPedido} disabled={loading} style={btnAction}>{loading ? 'Enviando...' : 'ENVIAR A COCINA'}</button>
-            </div>
-          </div>
-        )}
-
-        {/* VISTA: COCINA */}
-        {activeTab === 'cocina' && (
-          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:'20px'}}>
-            {orders.filter(o=>o.status==='pendiente').map(o=>(
-              <div key={o.id} style={{background:'white', padding:'15px', borderLeft:'8px solid orange', borderRadius:'8px'}}>
-                <h3>{o.service_type}: {o.table_number || o.customer_name}</h3>
-                <ul>{o.order_items.map(i=><li key={i.id}>{i.product.name} <br/> <small style={{color:'blue'}}>{i.notes}</small></li>)}</ul>
-                <button onClick={async ()=>{await supabase.from('orders').update({status:'listo'}).eq('id',o.id); fetchOrders();}} style={btnAction}>LISTO ✅</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* VISTA: CAJA */}
-        {activeTab === 'caja' && (
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px'}}>
-            <div style={panel}>
-              <h3>Cuentas por Cobrar</h3>
-              {orders.filter(o=>o.status!=='pagado').map(o=>(
-                <div key={o.id} onClick={()=>{setOrderToPay(o); setPagos([]);}} style={{padding:'10px', border:'1px solid #ccc', cursor:'pointer', marginBottom:'5px', background:o.status==='listo'?'#d4edda':'white'}}>
-                  <b>{o.service_type} {o.table_number || o.customer_name}</b> - ${o.total_usd} ({o.status})
-                </div>
-              ))}
-            </div>
-            {orderToPay && (
-              <div style={panel}>
-                <h3>Cobrando: {orderToPay.table_number || orderToPay.customer_name}</h3>
-                <h2 style={{color:'red'}}>Faltan: ${deudaRestanteUSD.toFixed(2)}</h2>
-                <p>Equivalente: {(deudaRestanteUSD * tasa.bcv).toFixed(2)} Bs</p>
-                <div style={{display:'flex', gap:'5px', marginBottom:'10px'}}>
-                  <input type="number" placeholder="Monto" value={montoInput} onChange={e=>setMontoInput(e.target.value)} style={{width:'80px'}} />
-                  <select value={metodo} onChange={e=>setMetodo(e.target.value)}>
-                    <option value="usd_cash">$ Efectivo</option><option value="bs_cash">Bs Efectivo</option>
-                    <option value="pago_movil">Pago Móvil</option><option value="zelle">Zelle</option><option value="cortesia">Cortesía</option>
-                  </select>
-                  <button onClick={agregarPago} style={{padding:'0 15px'}}>+</button>
-                </div>
-                {pagos.map((p,i)=><div key={i}>✓ {p.metodo}: ${p.montoUSD.toFixed(2)}</div>)}
-                <button onClick={async ()=>{
-                    if(deudaRestanteUSD > 0.01 && !pagos.some(p=>p.metodo==='cortesia')) return alert("Falta cubrir el saldo");
-                    await supabase.from('payments').insert(pagos.map(p=>({order_id:orderToPay.id, method:p.metodo, amount_usd:p.montoUSD, amount_original:p.montoOriginal, exchange_rate:tasa.bcv})));
-                    await supabase.from('orders').update({status:'pagado', is_courtesy:pagos.some(p=>p.metodo==='cortesia')}).eq('id',orderToPay.id);
-                    alert("¡Pagado con éxito!"); setOrderToPay(null); fetchData();
-                }} style={btnAction}>CERRAR CUENTA</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* VISTA: INVENTARIO Y COMPRAS */}
-        {activeTab === 'inventario' && (
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px'}}>
-            <div style={panel}>
-              <h3>📦 Stock Actual</h3>
-              <table style={{width:'100%', borderCollapse:'collapse'}}>
-                <thead><tr style={{borderBottom:'2px solid #ddd'}}><th>Ítem</th><th>Stock</th><th>Unidad</th></tr></thead>
-                <tbody>{inventario.map(i=>(<tr key={i.id} style={{borderBottom:'1px solid #eee'}}><td>{i.name}</td><td>{Number(i.stock).toFixed(2)}</td><td>{i.unit}</td></tr>))}</tbody>
-              </table>
-            </div>
-            <div style={panel}>
-              <h3>🛒 Cargar Compra</h3>
-              <select style={input} onChange={e=>setNuevaCompra({...nuevaCompra, ingrediente: e.target.value})}><option>Elegir...</option>{inventario.map(i=><option key={i.id} value={i.name}>{i.name}</option>)}</select>
-              <input type="number" placeholder="Cantidad" style={input} value={nuevaCompra.cant} onChange={e=>setNuevaCompra({...nuevaCompra, cant:e.target.value})} />
-              <input type="number" placeholder="Costo Total $" style={input} value={nuevaCompra.costo} onChange={e=>setNuevaCompra({...nuevaCompra, costo:e.target.value})} />
-              <button onClick={async ()=>{
-                await supabase.from('purchases').insert([{ingredient_name: nuevaCompra.ingrediente, quantity: nuevaCompra.cant, cost_usd: nuevaCompra.costo}]);
-                alert("Stock actualizado"); setNuevaCompra({ingrediente:'', cant:'', costo:''}); fetchData();
-              }} style={btnAction}>REGISTRAR COMPRA</button>
-            </div>
-          </div>
-        )}
-
-        {/* VISTA: DASHBOARD / REPORTE */}
-        {activeTab === 'dashboard' && (
-          <div style={panel}>
-            <h3>📊 Cierre de Caja</h3>
-            <button onClick={async ()=>{
-                const {data} = await supabase.from('orders').select('*, payments(*)').gte('created_at', new Date().toISOString().split('T')[0]);
-                const pagadas = data.filter(o=>o.status==='pagado');
-                setReporteHoy({
-                    total: pagadas.reduce((a,b)=>a+b.total_usd,0),
-                    cantidad: pagadas.length,
-                    cortesias: data.filter(o=>o.is_courtesy)
-                });
-            }} style={btnAction}>VER VENTAS DE HOY</button>
-            {reporteHoy && (
-                <div id="print-area" style={{marginTop:'20px', border:'2px solid black', padding:'20px'}}>
-                    <center><h2>DONDE MANOLO - CIERRE</h2></center>
-                    <p>Cuentas Cobradas: {reporteHoy.cantidad}</p>
-                    <h2>TOTAL VENDIDO: ${reporteHoy.total.toFixed(2)}</h2>
-                    <hr/>
-                    <h4>Cortesías:</h4>
-                    {reporteHoy.cortesias.map(c=><p key={c.id}>- {c.customer_name || c.table_number}: ${c.total_usd}</p>)}
-                </div>
-            )}
-          </div>
-        )}
-
-      </div>
-      <style>{`@media print {.no-print, button, nav { display: none !important; } #print-area { display: block !important; }}`}</style>
+        
+        {/* ESTILOS DE IMPRESIÓN */}
+        <style>{`
+            @media print {
+                .no-print { display: none !important; }
+                body { background: white; color: black; }
+                #print-area { display: block !important; position: absolute; top:0; left:0; width: 100%; }
+                input, select, button { border: none; appearance: none; }
+            }
+        `}</style>
     </div>
   );
 }
 
-// ESTILOS
-const btnBig = { padding:'25px', borderRadius:'12px', background:'white', color:'#b22222', fontWeight:'bold', border:'none', cursor:'pointer', fontSize:'1.1em', boxShadow:'0 4px 6px rgba(0,0,0,0.2)' };
-const navBtn = { background:'none', border:'none', color:'white', cursor:'pointer', fontWeight:'bold' };
-const panel = { background:'white', padding:'20px', borderRadius:'10px', boxShadow:'0 2px 5px rgba(0,0,0,0.1)' };
-const card = { background:'white', padding:'10px', borderRadius:'8px', textAlign:'center', cursor:'pointer', border:'1px solid #ddd', boxShadow:'0 2px 4px rgba(0,0,0,0.05)' };
-const input = { width:'100%', padding:'10px', marginBottom:'10px', borderRadius:'5px', border:'1px solid #ccc' };
-const btnAction = { width:'100%', padding:'15px', background:'#28a745', color:'white', border:'none', borderRadius:'5px', fontWeight:'bold', cursor:'pointer' };
+// --- ESTILOS CSS-IN-JS ---
+const styles = {
+    mainContainer: { minHeight: '100vh', background: '#f4f4f4', fontFamily: 'Arial, sans-serif' },
+    loginContainer: { height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#b22222', color: 'white' },
+    title: { fontSize: '2.5rem', marginBottom: '10px' },
+    pinGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', width: '300px' },
+    userBtn: { padding: '20px', borderRadius: '10px', border: 'none', background: 'white', color: '#b22222', fontWeight: 'bold', fontSize: '1.1rem', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' },
+    navbar: { background: '#222', color: 'white', padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    navBtn: { background: '#444', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', marginLeft: '5px', fontWeight: 'bold' },
+    content: { padding: '20px', maxWidth: '1200px', margin: '0 auto' },
+    grid2: { display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' },
+    card: { background: 'white', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '20px' },
+    productGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px' },
+    productCard: { padding: '15px', background: 'white', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer', textAlign: 'center', transition: '0.2s' },
+    input: { padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '100%', marginBottom: '10px', boxSizing: 'border-box' },
+    actionBtn: { width: '100%', padding: '12px', background: '#28a745', color: 'white', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', fontSize: '1rem' }
+};
