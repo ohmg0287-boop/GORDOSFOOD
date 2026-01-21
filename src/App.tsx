@@ -1,323 +1,512 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { ShoppingCart, ChefHat, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, RefreshCw, LogOut, Edit3 } from 'lucide-react';
 
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL || '', import.meta.env.VITE_SUPABASE_ANON_KEY || '');
+// --- CONEXIÓN ---
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+// --- MATRIZ DE RECETAS (EXTRAÍDA DE TU EXCEL) ---
+// Formato: "Nombre Producto": { "Nombre Insumo": Cantidad a descontar }
+const RECIPES_MATRIX = {
+  "Mamandini de Carne": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "Papel Envolver (Und)": 1 },
+  "Mamandini de Pollo": { "Pan Batata hamb (Und)": 1, "Pollo 120g (Und)": 1, "Papel Envolver (Und)": 1 },
+  "Mitad de Quincena Doble carne": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 2, "Papel Envolver (Und)": 1 },
+  "Mitad de Quincena Doble Pollo": { "Pan Batata hamb (Und)": 1, "Pollo 120g (Und)": 2, "Papel Envolver (Und)": 1 },
+  "Mitad de Quincena Carne y Pollo": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "Pollo 120g (Und)": 1, "Papel Envolver (Und)": 1 },
+  "Viaje a Roma": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "tocineta": 1, "Papel Envolver (Und)": 1 },
+  "La Buchona": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "Chuleta 120g (Und)": 1, "tocineta": 1, "Papel Envolver (Und)": 1 },
+  "Big Manolo": { "Pan Gigante (Und)": 1, "Carne 120g (Und)": 3, "Pollo 120g (Und)": 1, "Chuleta 120g (Und)": 1, "tocineta": 2, "Jamon": 2, "Papel Envolver (Und)": 2 },
+  "La Callejera": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "Chorizo de ajo": 1, "Papel Envolver (Und)": 1 },
+  "Salva Patria": { "Pan Batata perro (Und)": 1, "salchicha figos": 1, "Papel Envolver (Und)": 1 },
+  "El Resuelve": { "Pan Batata perro (Und)": 1, "Salchicha Ahumada": 1, "Papel Envolver (Und)": 1 },
+  "El Sifrino": { "Pan Batata perro (Und)": 1, "Salchicha Ahumada": 1, "tocineta": 1, "queso chedar reb": 1, "Bandeja Anime (Und)": 1 },
+  "Pepito Mitad Quincena": { "Pan pepito (Und)": 1, "Porciones pep 150": 1, "Papel Envolver (Und)": 1 },
+  "Pepito Hoy Cobre": { "Pan pepito (Und)": 1, "Porciones pep 250": 1, "tocineta": 1, "queso chedar br": 1, "Papel Envolver (Und)": 1 },
+  "El antojito (6und)": { "tequeños racion": 0.5, "Bandeja Anime (Und)": 1 }, // Aprox media racion
+  "El antojito (8und)": { "tequeños racion": 0.7, "Bandeja Anime (Und)": 1 },
+  "El antojito (14und)": { "tequeños racion": 1, "Bandeja Anime (Und)": 1 },
+  "La Acompañante": { "Papas (Porción 150g)": 1, "Bandeja Anime (Und)": 1 },
+  "Nestea Pequeño": { "Vaso Plástico p (Und)": 1 },
+  "Nestea Grande": { "Vaso Plástico g (Und)": 1, "Nestea Grande": 1 },
+  "Agua Personal": { "Agua Personal": 1 },
+  "Refresco 1 Litros": { "refresco 1l": 1 },
+  "Refresco 1.5 Litros": { "Refresco 1.5L (Bot)": 1 }
+};
 
 export default function DondeManoloApp() {
-    const [currentUser, setCurrentUser] = useState(null);
-    const [activeTab, setActiveTab] = useState('login');
-    const [loading, setLoading] = useState(false);
-    const [tasa, setTasa] = useState(54.50);
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState('login');
+  const [loading, setLoading] = useState(false);
+  const [tasa, setTasa] = useState(0);
 
-    // Estados de Datos
-    const [staff, setStaff] = useState([]);
-    const [productos, setProductos] = useState([]);
-    const [ingredientes, setIngredientes] = useState([]);
-    const [orders, setOrders] = useState([]);
+  // Datos
+  const [products, setProducts] = useState([]);
+  const [ingredients, setIngredients] = useState([]);
+  const [orders, setOrders] = useState([]);
+  
+  // Operativo
+  const [cart, setCart] = useState([]);
+  const [serviceInfo, setServiceInfo] = useState({ type: 'Mesa', val: '' });
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  
+  // Caja
+  const [payAmount, setPayAmount] = useState('');
+  const [payMethod, setPayMethod] = useState('usd_efectivo');
+  const [currentPayments, setCurrentPayments] = useState([]);
+
+  useEffect(() => {
+    fetchRate();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadData();
+      if (user.role === 'cocina') {
+        const i = setInterval(fetchOrders, 5000);
+        return () => clearInterval(i);
+      }
+    }
+  }, [user]);
+
+  // --- CARGA DE DATOS ---
+  const fetchRate = async () => {
+    const { data } = await supabase.from('settings').select('value').eq('key', 'tasa').single();
+    if (data) setTasa(data.value.usd);
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    const p = await supabase.from('products').select('*').order('name');
+    const i = await supabase.from('ingredients').select('*').order('name');
+    const o = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
     
-    // Estados Operativos
-    const [carrito, setCarrito] = useState([]);
-    const [serviceDetails, setServiceDetails] = useState({ type: 'Mesa', info: '' });
-    const [orderToPay, setOrderToPay] = useState(null);
-    const [pagosActuales, setPagosActuales] = useState([]);
-    const [montoInput, setMontoInput] = useState('');
-    const [metodoPago, setMetodoPago] = useState('usd_efectivo');
-    const [reporteData, setReporteData] = useState(null);
+    if (p.data) setProducts(p.data);
+    if (i.data) setIngredients(i.data);
+    if (o.data) setOrders(o.data);
+    setLoading(false);
+  };
 
-    useEffect(() => { fetchStaff(); fetchSettings(); }, []);
+  const fetchOrders = async () => {
+    const { data } = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
+    if (data) setOrders(data);
+  };
 
-    useEffect(() => {
-        if (currentUser) {
-            fetchProducts();
-            fetchOrders();
-            fetchIngredients();
-            if (currentUser.role === 'cocina') {
-                const timer = setInterval(fetchOrders, 5000);
-                return () => clearInterval(timer);
+  // --- LÓGICA DE NEGOCIO ---
+  const login = async (pin) => {
+    const { data } = await supabase.from('staff').select('*').eq('pin', pin).single();
+    if (data) {
+      setUser(data);
+      if (data.role === 'admin') setView('dashboard');
+      else if (data.role === 'caja') setView('caja');
+      else if (data.role === 'mesero') setView('pedidos');
+      else if (data.role === 'cocina') setView('cocina');
+    } else {
+      alert("PIN Incorrecto");
+    }
+  };
+
+  const sendOrder = async () => {
+    if (cart.length === 0 || !serviceInfo.val) return alert("Carrito vacío o falta Mesa/Cliente");
+    setLoading(true);
+
+    const total = cart.reduce((sum, item) => sum + item.price_usd, 0);
+
+    // 1. Crear Orden
+    const { data: order, error } = await supabase.from('orders').insert([{
+      total_usd: total,
+      service_type: serviceInfo.type,
+      info: serviceInfo.val,
+      created_by: user.name,
+      status: 'pendiente'
+    }]).select().single();
+
+    if (error) { alert("Error al crear orden"); setLoading(false); return; }
+
+    // 2. Crear Items
+    const items = cart.map(i => ({
+      order_id: order.id,
+      product_name: i.name,
+      quantity: 1,
+      price_at_time: i.price_usd,
+      notes: i.notes || ''
+    }));
+    await supabase.from('order_items').insert(items);
+
+    // 3. DESCONTAR INVENTARIO (MAGIA)
+    // Recorremos el carrito y buscamos en la matriz
+    for (let item of cart) {
+      const recipe = RECIPES_MATRIX[item.name];
+      if (recipe) {
+        for (let [ingName, qty] of Object.entries(recipe)) {
+            // Buscamos el ingrediente en el estado actual para tener su ID
+            const dbIng = ingredients.find(i => i.name === ingName);
+            if (dbIng) {
+                // Llamada RPC o update directo. Haremos update directo por simplicidad
+                // Nota: En producción idealmente se usa un procedimiento almacenado
+                const newStock = parseFloat(dbIng.stock) - qty;
+                await supabase.from('ingredients').update({ stock: newStock }).eq('id', dbIng.id);
             }
         }
-    }, [currentUser]);
+      }
+    }
 
-    // --- FUNCIONES CORE ---
-    const fetchStaff = async () => {
-        const { data } = await supabase.from('staff').select('*').eq('active', true);
-        if (data) setStaff(data);
-    };
+    alert("Pedido Enviado a Cocina 👨‍🍳");
+    setCart([]);
+    setServiceInfo({ type: 'Mesa', val: '' });
+    loadData(); // Recargar inventario visualmente
+    setLoading(false);
+  };
 
-    const fetchSettings = async () => {
-        const { data } = await supabase.from('settings').select('value').eq('key', 'exchange_rate').single();
-        if (data) setTasa(data.value.bcv || 54.50);
-    };
+  const handlePayment = async () => {
+    const totalPaid = currentPayments.reduce((s, p) => s + p.amount_usd, 0);
+    const remaining = selectedOrder.total_usd - totalPaid;
 
-    const fetchProducts = async () => {
-        const { data } = await supabase.from('products').select('*').order('name');
-        if (data) setProductos(data);
-    };
+    if (remaining > 0.01) return alert("Falta cubrir el monto total");
 
-    const fetchIngredients = async () => {
-        const { data } = await supabase.from('ingredients').select('*').order('name');
-        if (data) setIngredientes(data);
-    };
+    setLoading(true);
+    // Guardar pagos
+    const paymentsToSave = currentPayments.map(p => ({
+        order_id: selectedOrder.id,
+        method: p.method,
+        amount_usd: p.amount_usd,
+        amount_bs: p.amount_bs,
+        rate_used: tasa
+    }));
+    await supabase.from('payments').insert(paymentsToSave);
+    await supabase.from('orders').update({ status: 'pagado' }).eq('id', selectedOrder.id);
 
-    const fetchOrders = async () => {
-        const { data } = await supabase.from('orders').select('*, order_items(*, product:products(name)), payments(*)').order('created_at', { ascending: false });
-        if (data) setOrders(data);
-    };
+    alert("Venta Cobrada Exitosamente 💰");
+    setSelectedOrder(null);
+    setCurrentPayments([]);
+    fetchOrders();
+    setLoading(false);
+  };
 
-    // --- ACCIONES DUEÑO ---
-    const updateStockManual = async (id, newStock) => {
-        if (currentUser.name !== 'Manolo Dueño') return;
-        await supabase.from('ingredients').update({ stock: newStock }).eq('id', id);
-        fetchIngredients();
-    };
+  // --- UI COMPONENTS ---
+  
+  if (!user) return (
+    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
+      <h1 className="text-4xl font-bold mb-8 text-yellow-500">DONDE MANOLO</h1>
+      <div className="grid grid-cols-2 gap-4">
+        {[0, 1, 2, 3].map(i => (
+            <button key={i} onClick={() => {
+                const pin = prompt("Ingrese su PIN:");
+                if(pin) login(pin);
+            }} className="p-8 bg-gray-800 rounded-xl hover:bg-gray-700 text-xl font-bold border border-gray-700">
+                {['Dueño', 'Caja', 'Mesero', 'Cocina'][i]}
+            </button>
+        ))}
+      </div>
+    </div>
+  );
 
-    const resetStock100 = async () => {
-        if (!confirm("¿Poner todos los ingredientes en 100 unidades?")) return;
-        const { data } = await supabase.from('ingredients').select('id');
-        for (let item of data) {
-            await supabase.from('ingredients').update({ stock: 100 }).eq('id', item.id);
-        }
-        fetchIngredients();
-        alert("Inventario reseteado a 100");
-    };
-
-    const deleteHistory = async () => {
-        if (!confirm("¿BORRAR TODO EL HISTORIAL DE VENTAS? Esta acción no se puede deshacer.")) return;
-        await supabase.from('orders').delete().neq('status', 'placeholder');
-        fetchOrders();
-        alert("Historial blanqueado");
-    };
-
-    const handleLogin = (pin) => {
-        const user = staff.find(u => u.pin === pin);
-        if (user) {
-            setCurrentUser(user);
-            if (user.role === 'cocina') setActiveTab('cocina');
-            else if (user.role === 'caja') setActiveTab('pos_caja');
-            else if (user.role === 'mesero') setActiveTab('pos_mesero');
-            else setActiveTab('dashboard');
-        } else alert("PIN Incorrecto");
-    };
-
-    // --- SISTEMA DE PEDIDOS ---
-    const sendOrder = async () => {
-        if (!serviceDetails.info || carrito.length === 0) return alert("Faltan datos");
-        setLoading(true);
-        try {
-            const { data: order, error } = await supabase.from('orders').insert([{
-                total_usd: carrito.reduce((s, i) => s + i.price_usd, 0),
-                service_type: serviceDetails.type,
-                table_number: serviceDetails.type === 'Mesa' ? serviceDetails.info : null,
-                customer_name: serviceDetails.type !== 'Mesa' ? serviceDetails.info : null,
-                created_by: currentUser.name,
-                exchange_rate: tasa
-            }]).select().single();
-            
-            if (error) throw error;
-
-            const items = carrito.map(i => ({ order_id: order.id, product_id: i.id, quantity: 1, price_at_time: i.price_usd, notes: i.notes }));
-            await supabase.from('order_items').insert(items);
-            
-            alert("Pedido Enviado");
-            setCarrito([]);
-            setServiceDetails({ type: 'Mesa', info: '' });
-            fetchOrders();
-        } catch (e) { alert(e.message); }
-        setLoading(false);
-    };
-
-    // --- VISTA CAJA ---
-    const totalAbonado = orderToPay ? pagosActuales.reduce((s, p) => s + p.amount_usd, 0) : 0;
-    const restanteUSD = orderToPay ? orderToPay.total_usd - totalAbonado : 0;
-
-    const finalizarPago = async () => {
-        if (restanteUSD > 0.01) return alert("Falta saldo");
-        setLoading(true);
-        await supabase.from('payments').insert(pagosActuales.map(p => ({ ...p, order_id: orderToPay.id, exchange_rate: tasa })));
-        await supabase.from('orders').update({ status: 'pagado' }).eq('id', orderToPay.id);
-        setOrderToPay(null);
-        setPagosActuales([]);
-        fetchOrders();
-        setLoading(false);
-    };
-
-    if (!currentUser) return (
-        <div style={styles.loginPage}>
-            <h1>DONDE MANOLO</h1>
-            <div style={styles.pinGrid}>
-                {staff.map(u => <button key={u.id} onClick={() => handleLogin(prompt(`PIN de ${u.name}`))} style={styles.userBtn}>{u.name}</button>)}
-            </div>
+  return (
+    <div className="min-h-screen pb-20">
+      {/* NAVBAR */}
+      <nav className="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-lg">
+        <div className="font-bold text-lg text-yellow-400">DONDE MANOLO <span className="text-xs text-gray-400">({user.name})</span></div>
+        <div className="flex gap-2">
+            {user.role === 'admin' && (
+                <>
+                <button onClick={() => setView('dashboard')} className={`p-2 rounded ${view==='dashboard'?'bg-yellow-600':'bg-gray-700'}`}><LayoutDashboard size={20}/></button>
+                <button onClick={() => setView('inventario')} className={`p-2 rounded ${view==='inventario'?'bg-yellow-600':'bg-gray-700'}`}><Package size={20}/></button>
+                </>
+            )}
+            {(user.role === 'admin' || user.role === 'caja') && (
+                <button onClick={() => setView('caja')} className={`p-2 rounded ${view==='caja'?'bg-yellow-600':'bg-gray-700'}`}><DollarSign size={20}/></button>
+            )}
+            {user.role !== 'cocina' && (
+                <button onClick={() => setView('pedidos')} className={`p-2 rounded ${view==='pedidos'?'bg-yellow-600':'bg-gray-700'}`}><ShoppingCart size={20}/></button>
+            )}
+            {(user.role === 'admin' || user.role === 'cocina') && (
+                <button onClick={() => setView('cocina')} className={`p-2 rounded ${view==='cocina'?'bg-yellow-600':'bg-gray-700'}`}><ChefHat size={20}/></button>
+            )}
+            <button onClick={() => window.location.reload()} className="p-2 bg-red-600 rounded"><LogOut size={20}/></button>
         </div>
-    );
+      </nav>
 
-    return (
-        <div style={styles.appContainer}>
-            <nav style={styles.nav} className="no-print">
-                <span style={{fontWeight:'bold'}}>M&F - {currentUser.name}</span>
-                <div style={{display:'flex', gap:'10px'}}>
-                    {currentUser.role === 'admin' && <button onClick={() => setActiveTab('dashboard')} style={styles.navBtn}>📊 Panel</button>}
-                    {currentUser.role === 'admin' && <button onClick={() => setActiveTab('inventario')} style={styles.navBtn}>📦 Stock</button>}
-                    {(currentUser.role === 'admin' || currentUser.role === 'caja') && <button onClick={() => setActiveTab('pos_caja')} style={styles.navBtn}>💰 Caja</button>}
-                    {(currentUser.role !== 'cocina') && <button onClick={() => setActiveTab('pos_mesero')} style={styles.navBtn}>📝 Pedidos</button>}
-                    {(currentUser.role === 'admin' || currentUser.role === 'cocina') && <button onClick={() => setActiveTab('cocina')} style={styles.navBtn}>👨‍🍳 Cocina</button>}
-                    <button onClick={() => window.location.reload()} style={{...styles.navBtn, background:'#d9534f'}}>Cerrar</button>
-                </div>
-            </nav>
-
-            <div style={styles.content}>
-                {/* --- DASHBOARD --- */}
-                {activeTab === 'dashboard' && (
+      <div className="max-w-7xl mx-auto p-4">
+        
+        {/* --- DASHBOARD --- */}
+        {view === 'dashboard' && (
+            <div className="space-y-6">
+                <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500 flex justify-between items-center">
                     <div>
-                        <div style={styles.card}>
-                            <h3>Control Maestro</h3>
-                            <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
-                                <div>Tasa BCV: <input type="number" value={tasa} onChange={e => setTasa(e.target.value)} style={{width:'80px'}}/></div>
-                                <button onClick={() => resetStock100()} style={{background:'green', color:'white'}}>Poner Todo en 100</button>
-                                <button onClick={() => deleteHistory()} style={{background:'red', color:'white'}}>Blanquear Ventas</button>
-                            </div>
-                        </div>
-                        <div style={styles.card} id="reporte-ventas">
-                            <div style={{display:'flex', justifyContent:'space-between'}}>
-                                <h3>Reporte de Ventas</h3>
-                                <button onClick={() => window.print()} className="no-print">🖨️ Imprimir</button>
-                            </div>
-                            <table style={{width:'100%', borderCollapse:'collapse'}}>
-                                <thead><tr style={{borderBottom:'2px solid #000'}}><th>Fecha</th><th>Ref</th><th>Total $</th><th>Estado</th></tr></thead>
-                                <tbody>
-                                    {orders.map(o => (
-                                        <tr key={o.id} style={{borderBottom:'1px solid #eee'}}>
-                                            <td>{new Date(o.created_at).toLocaleTimeString()}</td>
-                                            <td>{o.service_type} - {o.table_number || o.customer_name}</td>
-                                            <td>${o.total_usd.toFixed(2)}</td>
-                                            <td>{o.status}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                        <h2 className="text-xl font-bold text-gray-700">Configuración Global</h2>
+                        <p className="text-gray-500">Tasa del día (BCV/Paralelo)</p>
                     </div>
-                )}
-
-                {/* --- INVENTARIO --- */}
-                {activeTab === 'inventario' && (
-                    <div style={styles.card}>
-                        <div style={{display:'flex', justifyContent:'space-between'}}>
-                            <h3>Inventario de Ingredientes</h3>
-                            <button onClick={() => window.print()} className="no-print">🖨️ Imprimir Stock</button>
-                        </div>
-                        <table style={{width:'100%'}}>
-                            <thead><tr style={{textAlign:'left'}}><th>Nombre</th><th>Stock</th><th>Unidad</th>{currentUser.name === 'Manolo Dueño' && <th>Acción</th>}</tr></thead>
-                            <tbody>
-                                {ingredientes.map(i => (
-                                    <tr key={i.id} style={{borderBottom:'1px solid #eee'}}>
-                                        <td>{i.name}</td>
-                                        <td style={{fontWeight:'bold', color: i.stock < 10 ? 'red' : 'black'}}>{i.stock}</td>
-                                        <td>{i.unit}</td>
-                                        {currentUser.name === 'Manolo Dueño' && (
-                                            <td><button onClick={() => updateStockManual(i.id, prompt("Nuevo stock:", i.stock))}>✏️</button></td>
-                                        )}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div className="flex gap-4 items-center">
+                        <span className="text-2xl font-bold text-green-600">1 USD =</span>
+                        <input type="number" value={tasa} onChange={e => setTasa(e.target.value)} className="border p-2 rounded text-xl w-32" />
+                        <button onClick={async () => {
+                            await supabase.from('settings').upsert({ key:'tasa', value: { usd: tasa }});
+                            alert("Tasa actualizada");
+                        }} className="bg-blue-600 text-white px-4 py-2 rounded font-bold">Guardar</button>
                     </div>
-                )}
+                </div>
 
-                {/* --- CAJA --- */}
-                {activeTab === 'pos_caja' && (
-                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px'}}>
-                        <div style={styles.card}>
-                            <h3>Cuentas Pendientes</h3>
-                            {orders.filter(o => o.status !== 'pagado').map(o => (
-                                <div key={o.id} onClick={() => {setOrderToPay(o); setPagosActuales([]);}} style={{padding:'10px', border:'1px solid #ddd', marginBottom:'5px', cursor:'pointer', background: o.status === 'listo' ? '#e9f7ef' : '#fff'}}>
-                                    <b>{o.service_type} {o.table_number || o.customer_name}</b> - ${o.total_usd}
-                                </div>
-                            ))}
+                <div className="bg-white p-6 rounded-lg shadow-md">
+                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Users/> Gestión de Personal (Dueño)</h3>
+                    {user.name === 'Manolo Dueño' ? (
+                        <div className="flex gap-4">
+                            <button onClick={async () => {
+                                if(confirm("¿RESET TOTAL A 100 UNIDADES?")) {
+                                    const { data } = await supabase.from('ingredients').select('id');
+                                    for(let i of data) await supabase.from('ingredients').update({stock: 100}).eq('id', i.id);
+                                    loadData();
+                                    alert("Todo a 100");
+                                }
+                            }} className="bg-red-100 text-red-700 p-4 rounded border border-red-300 hover:bg-red-200">
+                                ☢️ Reset Stock a 100
+                            </button>
+                            <button onClick={async () => {
+                                if(confirm("¿BORRAR HISTORIAL DE VENTAS?")) {
+                                    await supabase.from('order_items').delete().neq('quantity', 0);
+                                    await supabase.from('payments').delete().neq('amount_usd', 0);
+                                    await supabase.from('orders').delete().neq('total_usd', 0);
+                                    alert("Historial borrado");
+                                    loadData();
+                                }
+                            }} className="bg-orange-100 text-orange-700 p-4 rounded border border-orange-300 hover:bg-orange-200">
+                                🗑️ Blanquear Ventas
+                            </button>
                         </div>
-                        {orderToPay && (
-                            <div style={styles.card}>
-                                <h3>Cobrar: ${orderToPay.total_usd}</h3>
-                                <div style={{background:'#f8f9fa', padding:'10px', borderRadius:'5px', marginBottom:'10px'}}>
-                                    <p>Faltante $: <b>${restanteUSD.toFixed(2)}</b></p>
-                                    <p>Faltante Bs: <b style={{color:'red'}}>{(restanteUSD * tasa).toFixed(2)} Bs</b></p>
-                                </div>
-                                <div style={{display:'flex', gap:'5px'}}>
-                                    <input type="number" placeholder="Monto" value={montoInput} onChange={e => setMontoInput(e.target.value)} style={{width:'80px'}}/>
-                                    <select onChange={e => setMetodoPago(e.target.value)}>
-                                        <option value="usd_efectivo">$ Efectivo</option>
-                                        <option value="bs_efectivo">Bs Efectivo</option>
-                                        <option value="pago_movil">Pago Móvil</option>
-                                        <option value="punto">Punto</option>
-                                    </select>
-                                    <button onClick={() => {
-                                        const amt = parseFloat(montoInput);
-                                        const usdVal = (metodoPago === 'usd_efectivo' || metodoPago === 'zelle') ? amt : amt / tasa;
-                                        setPagosActuales([...pagosActuales, { method: metodoPago, amount_usd: usdVal, amount_original: amt }]);
-                                        setMontoInput('');
-                                    }}>Add</button>
-                                </div>
-                                <button onClick={finalizarPago} style={{...styles.actionBtn, marginTop:'20px'}}>Finalizar Venta</button>
-                            </div>
-                        )}
-                    </div>
-                )}
+                    ) : <p className="text-gray-400">Solo Manolo puede ver estas opciones.</p>}
+                </div>
+            </div>
+        )}
 
-                {/* --- MESERO --- */}
-                {activeTab === 'pos_mesero' && (
-                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px'}}>
-                        <div style={styles.productGrid}>
-                            {productos.map(p => (
-                                <div key={p.id} onClick={() => setCarrito([...carrito, {...p, tempId: Math.random(), notes:''}])} style={styles.productCard}>
-                                    {p.name} <br/> <b>${p.price_usd}</b>
-                                </div>
-                            ))}
-                        </div>
-                        <div style={styles.card}>
-                            <h3>Pedido Actual</h3>
-                            <input placeholder="Mesa / Cliente" onChange={e => setServiceDetails({...serviceDetails, info: e.target.value})} style={styles.input}/>
-                            {carrito.map(item => (
-                                <div key={item.tempId} style={{fontSize:'0.9em', borderBottom:'1px solid #eee'}}>
-                                    {item.name} - ${item.price_usd}
-                                    <input placeholder="Nota..." onChange={e => {item.notes = e.target.value}} style={{width:'100%', fontSize:'0.8em'}}/>
-                                </div>
-                            ))}
-                            <button onClick={sendOrder} style={styles.actionBtn}>Enviar a Cocina</button>
-                        </div>
-                    </div>
-                )}
-
-                {/* --- COCINA --- */}
-                {activeTab === 'cocina' && (
-                    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'10px'}}>
-                        {orders.filter(o => o.status === 'pendiente').map(o => (
-                            <div key={o.id} style={{background:'white', padding:'10px', borderRadius:'8px', borderLeft:'5px solid #f0ad4e'}}>
-                                <h4>{o.service_type}: {o.table_number || o.customer_name}</h4>
-                                {o.order_items.map(i => <div key={i.id}>- {i.product.name} <br/> <small>{i.notes}</small></div>)}
-                                <button onClick={async () => { await supabase.from('orders').update({status:'listo'}).eq('id', o.id); fetchOrders(); }} style={{marginTop:'10px', width:'100%'}}>LISTO ✅</button>
+        {/* --- PEDIDOS (MESERO / CAJA) --- */}
+        {view === 'pedidos' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[80vh]">
+                {/* MENU */}
+                <div className="md:col-span-2 overflow-y-auto bg-white p-4 rounded shadow-lg">
+                    <h2 className="font-bold text-xl mb-4">Menú</h2>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                        {products.map(p => (
+                            <div key={p.id} onClick={() => setCart([...cart, { ...p, tempId: Math.random() }])} 
+                                className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition">
+                                <h3 className="font-bold text-gray-800">{p.name}</h3>
+                                <p className="text-green-600 font-bold">${p.price_usd}</p>
+                                <span className="text-xs bg-gray-200 px-2 rounded text-gray-600">{p.category}</span>
                             </div>
                         ))}
                     </div>
+                </div>
+                {/* COMANDA */}
+                <div className="bg-white p-4 rounded shadow-lg flex flex-col h-full">
+                    <h2 className="font-bold text-xl mb-2">Orden Actual</h2>
+                    <div className="flex gap-2 mb-4">
+                        <select className="border p-2 rounded" onChange={e => setServiceInfo({...serviceInfo, type: e.target.value})}>
+                            <option>Mesa</option><option>Para Llevar</option><option>Delivery</option>
+                        </select>
+                        <input placeholder="# Mesa / Cliente" className="border p-2 rounded w-full" 
+                            onChange={e => setServiceInfo({...serviceInfo, val: e.target.value})} value={serviceInfo.val} />
+                    </div>
+                    <div className="flex-1 overflow-y-auto border-t border-b py-2 space-y-2">
+                        {cart.map((item, idx) => (
+                            <div key={item.tempId} className="flex justify-between items-start text-sm">
+                                <div>
+                                    <span className="font-bold">{item.name}</span>
+                                    <div className="text-xs text-gray-500">${item.price_usd}</div>
+                                    <input placeholder="Notas (sin cebolla...)" className="text-xs border-b w-full mt-1 focus:outline-none" 
+                                        onChange={e => {
+                                            const newCart = [...cart];
+                                            newCart[idx].notes = e.target.value;
+                                            setCart(newCart);
+                                        }}/>
+                                </div>
+                                <button onClick={() => setCart(cart.filter(x => x.tempId !== item.tempId))} className="text-red-500"><Trash2 size={16}/></button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-4 pt-4 border-t">
+                        <div className="flex justify-between text-xl font-bold mb-4">
+                            <span>Total:</span>
+                            <span>${cart.reduce((s, i) => s + i.price_usd, 0).toFixed(2)}</span>
+                        </div>
+                        <button onClick={sendOrder} disabled={loading} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 disabled:opacity-50">
+                            {loading ? 'Enviando...' : 'ENVIAR A COCINA'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* --- CAJA (COBRO) --- */}
+        {view === 'caja' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-4 rounded shadow">
+                    <h2 className="font-bold text-lg mb-4">Pedidos Pendientes de Pago</h2>
+                    {orders.filter(o => o.status !== 'pagado').map(o => (
+                        <div key={o.id} onClick={() => { setSelectedOrder(o); setCurrentPayments([]); }}
+                             className={`p-4 border-b cursor-pointer hover:bg-blue-50 flex justify-between items-center ${selectedOrder?.id === o.id ? 'bg-blue-100 border-l-4 border-blue-600' : ''}`}>
+                            <div>
+                                <div className="font-bold text-lg">{o.service_type} - {o.info}</div>
+                                <span className={`text-xs px-2 py-1 rounded ${o.status==='listo'?'bg-green-200 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{o.status.toUpperCase()}</span>
+                            </div>
+                            <div className="text-right">
+                                <div className="font-bold text-xl">${o.total_usd}</div>
+                                <div className="text-sm text-gray-500">{new Date(o.created_at).toLocaleTimeString()}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {selectedOrder && (
+                    <div className="bg-white p-6 rounded shadow-lg h-fit sticky top-20">
+                        <h2 className="text-2xl font-bold text-center mb-6 border-b pb-4">Cobrar Orden</h2>
+                        
+                        <div className="mb-6 bg-gray-50 p-4 rounded">
+                            <div className="flex justify-between text-lg mb-2">
+                                <span>Total a Pagar:</span>
+                                <span className="font-bold">${selectedOrder.total_usd.toFixed(2)}</span>
+                            </div>
+                            <div className="flex justify-between text-lg mb-2 text-blue-600">
+                                <span>En Bolívares:</span>
+                                <span className="font-bold">Bs {(selectedOrder.total_usd * tasa).toFixed(2)}</span>
+                            </div>
+                        </div>
+
+                        {/* PAGO CALCULATOR */}
+                        <div className="mb-6">
+                            <div className="flex gap-2 mb-2">
+                                <input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" 
+                                    value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                                <select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                                    <option value="usd_efectivo">$ Efectivo</option>
+                                    <option value="bs_efectivo">Bs Efectivo</option>
+                                    <option value="pago_movil">Pago Móvil</option>
+                                    <option value="punto">Punto</option>
+                                    <option value="zelle">Zelle</option>
+                                </select>
+                            </div>
+                            <button onClick={() => {
+                                const val = parseFloat(payAmount);
+                                if (!val) return;
+                                const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto';
+                                const usdEquiv = isBs ? val / tasa : val;
+                                
+                                setCurrentPayments([...currentPayments, {
+                                    method: payMethod,
+                                    amount_usd: usdEquiv,
+                                    amount_bs: isBs ? val : 0
+                                }]);
+                                setPayAmount('');
+                            }} className="w-full bg-blue-600 text-white py-2 rounded font-bold">Agregar Pago</button>
+                        </div>
+
+                        {/* LISTA DE PAGOS */}
+                        <div className="space-y-2 mb-6">
+                            {currentPayments.map((p, i) => (
+                                <div key={i} className="flex justify-between border-b pb-1 text-sm">
+                                    <span>{p.method}</span>
+                                    <span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* RESULTADO FINAL */}
+                        <div className="border-t pt-4">
+                            <div className="flex justify-between font-bold text-lg mb-4">
+                                <span>Restante:</span>
+                                {(() => {
+                                    const paid = currentPayments.reduce((s, p) => s + p.amount_usd, 0);
+                                    const rest = selectedOrder.total_usd - paid;
+                                    return (
+                                        <div className="text-right">
+                                            <div className={rest > 0.01 ? 'text-red-600' : 'text-green-600'}>
+                                                ${Math.max(0, rest).toFixed(2)}
+                                            </div>
+                                            {rest > 0.01 && (
+                                                <div className="text-sm text-red-500">
+                                                    Bs {(rest * tasa).toFixed(2)}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )
+                                })()}
+                            </div>
+                            <button onClick={handlePayment} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700">
+                                FINALIZAR VENTA
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
+        )}
 
-            <style>{`
-                @media print { .no-print { display: none !important; } .card { border: none !important; box-shadow: none !important; } }
-            `}</style>
-        </div>
-    );
+        {/* --- INVENTARIO (ADMIN) --- */}
+        {view === 'inventario' && (
+            <div className="bg-white p-6 rounded shadow-lg">
+                <div className="flex justify-between items-center mb-6 no-print">
+                    <h2 className="text-2xl font-bold">Inventario Real</h2>
+                    <button onClick={() => window.print()} className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2 rounded"><Printer size={16}/> Imprimir</button>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="bg-gray-100 border-b">
+                                <th className="p-3">Ingrediente</th>
+                                <th className="p-3">Stock Actual</th>
+                                <th className="p-3">Unidad</th>
+                                {user.name === 'Manolo Dueño' && <th className="p-3 no-print">Ajuste Manual</th>}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {ingredients.map(ing => (
+                                <tr key={ing.id} className="border-b hover:bg-gray-50">
+                                    <td className="p-3">{ing.name}</td>
+                                    <td className={`p-3 font-bold ${ing.stock < 10 ? 'text-red-600' : 'text-gray-800'}`}>{Number(ing.stock).toFixed(2)}</td>
+                                    <td className="p-3 text-sm text-gray-500">{ing.unit}</td>
+                                    {user.name === 'Manolo Dueño' && (
+                                        <td className="p-3 no-print">
+                                            <button onClick={async () => {
+                                                const val = prompt(`Nuevo stock para ${ing.name}:`, ing.stock);
+                                                if(val) {
+                                                    await supabase.from('ingredients').update({stock: val}).eq('id', ing.id);
+                                                    loadData();
+                                                }
+                                            }} className="text-blue-600 hover:text-blue-800"><Edit3 size={18}/></button>
+                                        </td>
+                                    )}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )}
+
+        {/* --- COCINA --- */}
+        {view === 'cocina' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {orders.filter(o => o.status === 'pendiente').map(o => (
+                    <div key={o.id} className="bg-white rounded-lg shadow-md overflow-hidden border-l-8 border-yellow-500">
+                        <div className="bg-yellow-50 p-3 border-b border-yellow-100 flex justify-between items-center">
+                            <span className="font-bold text-lg text-gray-800">{o.service_type}</span>
+                            <span className="text-sm font-bold bg-white px-2 rounded border">{o.info}</span>
+                        </div>
+                        <div className="p-4">
+                            <ul className="space-y-3">
+                                {o.order_items.map(item => (
+                                    <li key={item.id} className="text-gray-800 leading-tight">
+                                        <div className="font-bold text-lg">• {item.product_name}</div>
+                                        {item.notes && <div className="text-red-600 text-sm bg-red-50 p-1 rounded mt-1">⚠️ {item.notes}</div>}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <button onClick={async () => {
+                            await supabase.from('orders').update({status:'listo'}).eq('id', o.id);
+                            fetchOrders();
+                        }} className="w-full bg-green-600 text-white font-bold py-3 hover:bg-green-700">MARCAR LISTO ✅</button>
+                    </div>
+                ))}
+            </div>
+        )}
+
+      </div>
+    </div>
+  );
 }
-
-const styles = {
-    loginPage: { height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#8b0000', color: '#fff' },
-    pinGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
-    userBtn: { padding: '20px', fontSize: '1.2em', cursor: 'pointer', borderRadius: '10px', border: 'none' },
-    appContainer: { minHeight: '100vh', background: '#f4f4f4' },
-    nav: { background: '#222', color: '#fff', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-    navBtn: { background: '#444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' },
-    content: { padding: '20px' },
-    card: { background: '#fff', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', marginBottom: '20px' },
-    productGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px' },
-    productCard: { background: '#fff', padding: '15px', textAlign: 'center', borderRadius: '8px', cursor: 'pointer', border: '1px solid #ddd' },
-    input: { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #ccc', boxSizing: 'border-box' },
-    actionBtn: { width: '100%', padding: '15px', background: '#28a745', color: '#fff', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }
-};
