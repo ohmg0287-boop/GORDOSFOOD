@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ShoppingCart, ChefHat, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText, X } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save } from 'lucide-react';
 
 // --- CONEXIÓN ---
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-// --- MATRIZ DE RECETAS (INTACTA) ---
+// --- MATRIZ DE RECETAS ---
 const RECIPES_MATRIX = {
   "Mamandini de Carne": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "Papel Envolver (Und)": 1 },
   "Mamandini de Pollo": { "Pan Batata hamb (Und)": 1, "Pollo 120g (Und)": 1, "Papel Envolver (Und)": 1 },
@@ -29,7 +29,14 @@ const RECIPES_MATRIX = {
   "Nestea Grande": { "Vaso Plástico g (Und)": 1, "Nestea Grande": 1 },
   "Agua Personal": { "Agua Personal": 1 },
   "Refresco 1 Litros": { "refresco 1l": 1 },
-  "Refresco 1.5 Litros": { "Refresco 1.5L (Bot)": 1 }
+  "Refresco 1.5 Litros": { "Refresco 1.5L (Bot)": 1 },
+  "Propina bien Gastada": {},
+  "Cuota feliz (4und)": {},
+  "Cuota feliz (6und)": {},
+  "Cuota feliz (12und)": {},
+  "Gustazo del mes": {},
+  "Capricho de quincena": {},
+  "Malta lata": {}
 };
 
 export default function DondeManoloApp() {
@@ -49,7 +56,7 @@ export default function DondeManoloApp() {
   const [cart, setCart] = useState([]);
   const [serviceInfo, setServiceInfo] = useState({ type: 'Mesa', val: '' });
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [lastOrderTicket, setLastOrderTicket] = useState(null); // Para el ticket automático
+  const [lastOrderTicket, setLastOrderTicket] = useState(null); 
   
   // Caja y Gastos
   const [payAmount, setPayAmount] = useState('');
@@ -59,6 +66,7 @@ export default function DondeManoloApp() {
 
   // Reportes
   const [reportFilter, setReportFilter] = useState('today'); 
+  const [paymentBreakdown, setPaymentBreakdown] = useState({});
 
   useEffect(() => { fetchRate(); }, []);
 
@@ -74,7 +82,7 @@ export default function DondeManoloApp() {
 
   // --- CARGA DE DATOS ---
   const fetchRate = async () => {
-    const { data } = await supabase.from('settings').select('value').eq('key', 'tasa').single();
+    const { data } = await supabase.from('settings').select('value').eq('key', 'tasa').maybeSingle();
     if (data) setTasa(data.value.usd);
   };
 
@@ -85,7 +93,7 @@ export default function DondeManoloApp() {
     const o = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
     const e = await supabase.from('expenses').select('*').order('date', { ascending: false });
     
-    // Solo cargamos staff si es dueño
+    // Solo cargamos staff si es dueño (owner)
     if (user && user.role === 'owner') {
         const s = await supabase.from('staff').select('*').order('name');
         if (s.data) setStaffList(s.data);
@@ -103,22 +111,31 @@ export default function DondeManoloApp() {
     if (data) setOrders(data);
   };
 
-  // --- LOGIN ---
+  // --- LOGIN CORREGIDO ---
   const login = async (pin) => {
-    const { data } = await supabase.from('staff').select('*').eq('pin', pin).single();
-    if (data) {
-      setUser(data);
-      // Lógica de redirección por Rol
-      if (data.role === 'owner' || data.role === 'manager') setView('dashboard');
-      else if (data.role === 'caja') setView('caja');
-      else if (data.role === 'mesero') setView('pedidos');
-      else if (data.role === 'cocina') setView('cocina');
-    } else { 
-      alert("PIN Incorrecto"); 
+    // Usamos maybeSingle para evitar crash si hay duplicados, aunque no debería.
+    const { data, error } = await supabase.from('staff').select('*').eq('pin', pin).maybeSingle();
+    
+    if (error || !data) {
+      alert("PIN Incorrecto o Usuario no encontrado");
+      return;
+    }
+
+    setUser(data);
+    
+    // MAPEO EXACTO SEGÚN TU TABLA DE SUPABASE
+    if (data.role === 'owner') setView('dashboard');      // Dueño Total
+    else if (data.role === 'manager') setView('dashboard'); // Gerencia (Admin limitado)
+    else if (data.role === 'caja') setView('caja');
+    else if (data.role === 'mesero') setView('pedidos');
+    else if (data.role === 'cocina') setView('cocina');
+    else {
+        alert("Rol desconocido: " + data.role);
+        setUser(null);
     }
   };
 
-  // --- PEDIDOS ---
+  // --- PEDIDOS & TICKET ---
   const sendOrder = async () => {
     if (cart.length === 0 || !serviceInfo.val) return alert("Carrito vacío o falta Mesa/Cliente");
     setLoading(true);
@@ -155,6 +172,7 @@ export default function DondeManoloApp() {
     setCart([]); setServiceInfo({ type: 'Mesa', val: '' }); loadData(); setLoading(false);
   };
 
+  // --- PAGOS ---
   const handlePayment = async () => {
     const totalPaid = currentPayments.reduce((s, p) => s + p.amount_usd, 0);
     const remaining = selectedOrder.total_usd - totalPaid;
@@ -218,7 +236,7 @@ export default function DondeManoloApp() {
       loadData();
   };
 
-  // --- LÓGICA DE REPORTES CON DESGLOSE ---
+  // --- LÓGICA DE REPORTES ---
   const getFilteredData = () => {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -229,20 +247,12 @@ export default function DondeManoloApp() {
     if (reportFilter === 'week') filterDate = startOfWeek;
     if (reportFilter === 'month') filterDate = startOfMonth;
 
-    // Solo ordenes pagadas
     const filteredOrders = orders.filter(o => new Date(o.created_at) >= filterDate && o.status === 'pagado');
     const filteredExpenses = expenses.filter(e => new Date(e.date) >= filterDate);
-
-    // Calcular desglose de pagos (requiere hacer query de pagos o filtrar si los trajéramos todos, 
-    // para optimizar, en frontend asumimos que orders tiene lo necesario o hacemos fetch profundo, 
-    // en este caso simplificado: sumamos totales. Para desglose exacto necesitaríamos traer la tabla 'payments')
     
-    // NOTA: Para no romper el código anterior, haremos un fetch de pagos bajo demanda en el reporte
     return { filteredOrders, filteredExpenses };
   };
 
-  // Estado para el reporte de pagos detallado
-  const [paymentBreakdown, setPaymentBreakdown] = useState({});
   useEffect(() => {
       if (view === 'reportes') {
           const fetchPayments = async () => {
@@ -264,19 +274,27 @@ export default function DondeManoloApp() {
   }, [view, reportFilter, orders]);
 
 
-  // --- INTERFAZ ---
+  // --- INTERFAZ LOGIN (BOTONES SEPARADOS) ---
   if (!user) return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
       <h1 className="text-4xl font-bold mb-8 text-yellow-500">DONDE MANOLO</h1>
-      <div className="grid grid-cols-2 gap-4">
-        {[0, 1, 2, 3].map(i => (
-            <button key={i} onClick={() => {
-                const pin = prompt("Ingrese su PIN:");
-                if(pin) login(pin);
-            }} className="p-8 bg-gray-800 rounded-xl hover:bg-gray-700 text-xl font-bold border border-gray-700">
-                {['Gerencia/Dueño', 'Caja', 'Mesero', 'Cocina'][i]}
-            </button>
-        ))}
+      <div className="grid grid-cols-2 gap-6 w-full max-w-md px-4">
+        {/* BOTONES INDIVIDUALES Y CLAROS */}
+        <button onClick={() => { const p = prompt("PIN Dueño:"); if(p) login(p); }} className="p-6 bg-yellow-600 rounded-xl hover:bg-yellow-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">
+             👑 DUEÑO
+        </button>
+        <button onClick={() => { const p = prompt("PIN Gerencia:"); if(p) login(p); }} className="p-6 bg-blue-600 rounded-xl hover:bg-blue-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">
+             👔 GERENCIA
+        </button>
+        <button onClick={() => { const p = prompt("PIN Caja:"); if(p) login(p); }} className="p-6 bg-green-600 rounded-xl hover:bg-green-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">
+             💵 CAJA
+        </button>
+        <button onClick={() => { const p = prompt("PIN Mesero:"); if(p) login(p); }} className="p-6 bg-purple-600 rounded-xl hover:bg-purple-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">
+             🍽️ MESERO
+        </button>
+        <button onClick={() => { const p = prompt("PIN Cocina:"); if(p) login(p); }} className="col-span-2 p-4 bg-gray-700 rounded-xl hover:bg-gray-600 font-bold border border-gray-500">
+             🔥 COCINA
+        </button>
       </div>
     </div>
   );
@@ -304,7 +322,7 @@ export default function DondeManoloApp() {
         </div>
       </nav>
 
-      {/* --- TICKET MODAL (AUTOMÁTICO) --- */}
+      {/* --- TICKET MODAL --- */}
       {lastOrderTicket && (
         <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center">
             <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl">
@@ -372,11 +390,11 @@ export default function DondeManoloApp() {
                     </div>
                 </div>
 
-                {/* PERSONAL (Solo Owner ve esto) */}
+                {/* PERSONAL - SOLO VISIBLE PARA EL OWNER */}
                 {user.role === 'owner' ? (
                     <div className="bg-white p-6 rounded-lg shadow-md">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-lg flex items-center gap-2"><Users/> Gestión de Personal (Dueño)</h3>
+                            <h3 className="font-bold text-lg flex items-center gap-2"><Users/> Gestión de Personal (Solo Dueño)</h3>
                             <button onClick={() => handleStaff('add', { name: prompt("Nombre:"), role: prompt("Rol (owner, manager, caja, mesero, cocina):") })} className="bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1 text-sm"><PlusCircle size={16}/> Nuevo</button>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -391,7 +409,7 @@ export default function DondeManoloApp() {
                             ))}
                         </div>
                     </div>
-                ) : <div className="text-center text-gray-400 p-4">Solo el Dueño puede gestionar usuarios.</div>}
+                ) : <div className="p-4 bg-yellow-50 text-yellow-800 rounded border border-yellow-200">⚠️ La gestión de usuarios está reservada solo para el Dueño.</div>}
             </div>
         )}
 
@@ -465,6 +483,7 @@ export default function DondeManoloApp() {
                                     <td className="p-3">{ing.name}</td>
                                     <td className={`p-3 font-bold ${ing.stock < 10 ? 'text-red-600' : 'text-gray-800'}`}>{Number(ing.stock).toFixed(2)}</td>
                                     <td className="p-3 text-sm text-gray-500">{ing.unit}</td>
+                                    {/* SOLO EL OWNER PUEDE VER EL BOTÓN EDITAR */}
                                     {user.role === 'owner' && (
                                         <td className="p-3 no-print"><button onClick={async () => { const val = prompt(`Nuevo stock para ${ing.name}:`, ing.stock); if(val) { await supabase.from('ingredients').update({stock: val}).eq('id', ing.id); loadData(); }}} className="text-blue-600 hover:text-blue-800"><Edit3 size={18}/></button></td>
                                     )}
@@ -476,7 +495,7 @@ export default function DondeManoloApp() {
             </div>
         )}
 
-        {/* --- PEDIDOS (MESERO / CAJA) --- */}
+        {/* --- PEDIDOS --- */}
         {view === 'pedidos' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[80vh]">
                 <div className="md:col-span-2 overflow-y-auto bg-white p-4 rounded shadow-lg">
@@ -515,7 +534,7 @@ export default function DondeManoloApp() {
             </div>
         )}
 
-        {/* --- CAJA / COCINA / ETC se mantienen iguales en estructura visual pero con lógica corregida arriba --- */}
+        {/* --- COCINA --- */}
         {view === 'cocina' && (
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {orders.filter(o => o.status === 'pendiente').map(o => (
@@ -528,6 +547,7 @@ export default function DondeManoloApp() {
             </div>
         )}
         
+        {/* --- CAJA --- */}
         {view === 'caja' && (
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-4 rounded shadow">
