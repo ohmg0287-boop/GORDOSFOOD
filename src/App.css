@@ -40,3 +40,32 @@
 .read-the-docs {
   color: #888;
 }
+/* Esto le dice a la impresora: "Solo imprime lo que sea el ticket" */
+@media print {
+  /* Oculta todo: botones, menús, fondos */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Solo muestra el área que tenga el ID 'area-impresion' */
+  #area-impresion, #area-impresion * {
+    visibility: visible;
+  }
+
+  /* Posiciona el ticket al principio de la hoja */
+  #area-impresion {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 58mm; /* Ancho de tu papel */
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Quita los márgenes que pone Windows/Chrome por defecto */
+  @page {
+    margin: 0;
+    size: auto;
+  }
+}
+
