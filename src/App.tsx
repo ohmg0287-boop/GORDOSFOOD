@@ -68,18 +68,17 @@ export default function DondeManoloApp() {
   const [reportFilter, setReportFilter] = useState('today'); 
   const [paymentBreakdown, setPaymentBreakdown] = useState({});
 
-  useEffect(() => { fetchRate(); }, []);
-
-  useEffect(() => {
-    if (user) {
-      loadData();
-      if (user.role === 'cocina') {
-        const i = setInterval(fetchOrders, 5000);
-        return () => clearInterval(i);
-      }
+ // CAMBIO: Ahora Caja y Gerencia también refrescan pedidos automáticamente
+useEffect(() => {
+  if (user) {
+    loadData();
+    // Agregamos 'caja', 'owner' y 'manager' al auto-refresco cada 5 segundos
+    if (user.role === 'cocina' || user.role === 'caja' || user.role === 'owner' || user.role === 'manager') {
+      const i = setInterval(fetchOrders, 5000);
+      return () => clearInterval(i);
     }
-  }, [user]);
-
+  }
+}, [user]);
   // --- CARGA DE DATOS ---
   const fetchRate = async () => {
     const { data } = await supabase.from('settings').select('value').eq('key', 'tasa').maybeSingle();
