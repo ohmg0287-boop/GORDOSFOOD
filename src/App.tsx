@@ -322,30 +322,75 @@ useEffect(() => {
       </nav>
 
       {/* --- TICKET MODAL --- */}
-      {lastOrderTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center">
-            <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl">
-                <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">DONDE MANOLO</div>
-                <div className="mb-2">MESA/CLIENTE: {lastOrderTicket.info}</div>
-                <div className="mb-2">FECHA: {new Date().toLocaleTimeString()}</div>
-                <div className="border-b border-dashed mb-2"></div>
-                {lastOrderTicket.items.map((item, idx) => (
-                    <div key={idx} className="mb-1">
-                        <div className="font-bold">{item.quantity} x {item.product_name}</div>
-                        {item.notes && <div className="text-xs italic">({item.notes})</div>}
-                    </div>
-                ))}
-                <div className="border-t border-dashed mt-4 pt-2 text-center font-bold text-xl">
-                    PENDIENTE
-                </div>
-                <div className="mt-4 flex flex-col gap-2 no-print">
-                    <button onClick={() => window.print()} className="bg-blue-600 text-white p-2 rounded font-bold">🖨️ IMPRIMIR</button>
-                    <button onClick={() => setLastOrderTicket(null)} className="bg-gray-300 text-black p-2 rounded">CERRAR</button>
-                </div>
-            </div>
+{lastOrderTicket && (
+  <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center">
+    
+    {/* 1. ESTE ES EL TICKET INVISIBLE QUE SE IMPRIME (Solo para la impresora) */}
+    <div className="hidden">
+      <div id="ticket-print" style={{ width: '58mm', textAlign: 'center', color: 'black', background: 'white' }}>
+        <div style={{ fontWeight: 'bold', fontSize: '18px' }}>*** COCINA ***</div>
+        <div style={{ fontSize: '12px' }}>{new Date().toLocaleTimeString()}</div>
+        
+        {/* Mesa en Grande */}
+        <div style={{ fontSize: '30px', fontWeight: '900', border: '2px solid black', margin: '5px 0' }}>
+          {lastOrderTicket.info}
         </div>
-      )}
 
+        <div style={{ borderTop: '1px dashed black', margin: '5px 0' }}></div>
+
+        {/* Productos en Grande para el Cocinero */}
+        <div style={{ textAlign: 'left' }}>
+          {lastOrderTicket.items.map((item, idx) => (
+            <div key={idx} style={{ marginBottom: '8px' }}>
+              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
+                {item.quantity} x {item.product_name}
+              </div>
+              {item.notes && (
+                <div style={{ fontSize: '14px', fontStyle: 'italic', marginLeft: '10px' }}>
+                  ** {item.notes}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ borderTop: '1px dashed black', margin: '10px 0' }}></div>
+        <div style={{ fontSize: '12px', fontWeight: 'bold' }}>--- FIN DE ORDEN ---</div>
+        <br />.
+      </div>
+    </div>
+
+    {/* 2. ESTE ES EL MODAL QUE VES EN PANTALLA (No se imprime) */}
+    <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl rounded-lg">
+        <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">VISTA PREVIA</div>
+        <div className="mb-2">MESA/CLIENTE: <span className="font-bold">{lastOrderTicket.info}</span></div>
+        <div className="mb-2">FECHA: {new Date().toLocaleTimeString()}</div>
+        <div className="border-b border-dashed mb-2"></div>
+        
+        <div className="max-h-60 overflow-y-auto">
+            {lastOrderTicket.items.map((item, idx) => (
+                <div key={idx} className="mb-1 border-b border-gray-100 pb-1">
+                    <div className="font-bold text-base">{item.quantity} x {item.product_name}</div>
+                    {item.notes && <div className="text-xs italic text-blue-600">Nota: {item.notes}</div>}
+                </div>
+            ))}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2">
+            <button 
+                onClick={() => window.print()} 
+                className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">
+                👨‍🍳 ENVIAR A COCINA
+            </button>
+            <button 
+                onClick={() => setLastOrderTicket(null)} 
+                className="bg-gray-200 text-black p-2 rounded font-semibold text-sm">
+                CERRAR
+            </button>
+        </div>
+    </div>
+  </div>
+)}
       <div className="max-w-7xl mx-auto p-4">
         
         {/* --- DASHBOARD --- */}
