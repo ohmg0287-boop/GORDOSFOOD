@@ -40,32 +40,53 @@
 .read-the-docs {
   color: #888;
 }
-/* Esto le dice a la impresora: "Solo imprime lo que sea el ticket" */
+/* ESTILOS DE IMPRESIÓN LIMPIOS */
 @media print {
-  /* Oculta todo: botones, menús, fondos */
+  /* 1. Ocultar absolutamente todo en la pantalla */
   body * {
     visibility: hidden;
+    height: 0;
+    overflow: hidden;
   }
 
-  /* Solo muestra el área que tenga el ID 'area-impresion' */
-  #area-impresion, #area-impresion * {
+  /* 2. Mostrar solo nuestro ticket */
+  #ticket-print, #ticket-print * {
     visibility: visible;
+    height: auto;
+    overflow: visible;
   }
 
-  /* Posiciona el ticket al principio de la hoja */
-  #area-impresion {
+  /* 3. Configuración de la "Hoja" física */
+  @page {
+    size: auto;   /* Autoajuste */
+    margin: 0mm;  /* Cero margen para no desperdiciar papel */
+  }
+
+  /* 4. Posición y Centrado del Ticket */
+  #ticket-print {
     position: absolute;
     left: 0;
     top: 0;
-    width: 58mm; /* Ancho de tu papel */
-    margin: 0;
-    padding: 0;
+    width: 58mm; /* Ancho exacto de tu impresora */
+    margin: 0;   /* Sin márgenes externos */
+    padding: 2mm 5mm; /* Un poco de aire a los lados */
+    background: white;
+    color: black;
+    font-family: 'Courier New', monospace; /* Fuente tipo ticket */
+    text-align: center; /* TODO CENTRADO POR DEFECTO */
   }
 
-  /* Quita los márgenes que pone Windows/Chrome por defecto */
-  @page {
-    margin: 0;
-    size: auto;
+  /* Clases utilitarias para el ticket */
+  .ticket-row {
+    display: flex;
+    justify-content: space-between;
+    text-align: left; /* Los productos sí van alineados a la izq/der */
+    font-size: 12px;
+    margin-bottom: 2px;
+  }
+  
+  .ticket-divider {
+    border-top: 1px dashed black;
+    margin: 5px 0;
   }
 }
-
