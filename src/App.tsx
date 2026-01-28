@@ -378,7 +378,7 @@ useEffect(() => {
 
         <div className="mt-4 flex flex-col gap-2">
             <button 
-                onClick={handleEnviarCocina} 
+                onClick={() => window.print()} 
                 className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">
                 👨‍🍳 ENVIAR A COCINA
             </button>
@@ -619,33 +619,6 @@ useEffect(() => {
         )}
       </div>
       <style>{` @media print { .no-print { display: none !important; } body { background: white; } #reporte-imprimible { box-shadow: none; } } `}</style>
-   {/* --- TICKET DE COCINA PROFESIONAL 80MM --- */}
-<div id="ticket-cocina" className="hidden">
-  <div className="ticket-header">
-    <p>*** DONDE MANOLO ***</p>
-    <p>ORDEN DE COCINA</p>
-    <p>--------------------------------</p>
-  </div>
-  
-  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-    <span>FECHA: {new Date().toLocaleDateString()}</span>
-    <span>HORA: {new Date().toLocaleTimeString()}</span>
-  </div>
-
-  <div style={{ borderBottom: '2px solid black', marginBottom: '10px' }}></div>
-
-  {/* Aquí mapeas tus productos de la orden actual */}
-  <div className="ticket-body">
-    {currentOrder.map((item, index) => (
-      <div key={index} className="ticket-item" style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '20px', fontWeight: 'bold' }}>{item.quantity} x {item.name}</span>
-      </div>
-    ))}
-  </div>
-
-  <div style={{ borderTop: '2px solid black', marginTop: '10px', paddingTop: '5px' }}>
-    <p style={{ textAlign: 'center', fontSize: '14px' }}>-- Fin de la Comanda --</p>
-  </div>
-</div> </div>
+    </div>
   );
 }
