@@ -103,3 +103,39 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+/* --- CONFIGURACIÓN PARA IMPRESORA 80MM --- */
+@media print {
+  /* 1. Borramos absolutamente todo de la pantalla */
+  body * {
+    visibility: hidden !important;
+    display: none !important;
+  }
+
+  /* 2. Resucitamos solo el ticket de cocina */
+  #ticket-cocina, #ticket-cocina * {
+    visibility: visible !important;
+    display: block !important;
+  }
+
+  /* 3. Ajustes de la "hoja" de 80mm */
+  @page {
+    size: 80mm auto; /* Definimos el ancho de 80mm */
+    margin: 0;       /* Sin márgenes para aprovechar el papel */
+  }
+
+  #ticket-cocina {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm !important; /* Ancho total de tu nueva impresora */
+    padding: 2mm;
+    background: white;
+    color: black;
+    font-family: 'Courier New', Courier, monospace; /* Fuente clásica de ticket */
+  }
+
+  /* Ajustes de texto para que se vea grande en 80mm */
+  .ticket-header { font-size: 20px; font-weight: bold; text-align: center; }
+  .ticket-item { font-size: 18px; border-bottom: 1px dashed #000; padding: 5px 0; }
+  .ticket-total { font-size: 22px; font-weight: bold; text-align: right; margin-top: 10px; }
+}
