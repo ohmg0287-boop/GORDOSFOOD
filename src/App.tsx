@@ -378,7 +378,7 @@ useEffect(() => {
 
         <div className="mt-4 flex flex-col gap-2">
             <button 
-                onClick={() => window.print()} 
+                onClick={handleEnviarCocina} 
                 className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">
                 👨‍🍳 ENVIAR A COCINA
             </button>
