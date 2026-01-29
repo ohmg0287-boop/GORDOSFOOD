@@ -103,3 +103,53 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+/* =========================================
+   ESTILOS DE IMPRESIÓN (TICKET 80MM)
+   ========================================= */
+
+/* 1. Por defecto, el ticket está oculto en la pantalla de la tablet/PC */
+#ticket-impresion {
+  display: none;
+}
+
+/* 2. Cuando se manda a imprimir, ocurren estos cambios: */
+@media print {
+  
+  /* OCULTAR TODO lo que hay en la pantalla (botones, menús, fondo) */
+  body > * {
+    display: none !important;
+  }
+
+  /* MOSTRAR SOLO nuestro ticket nuevo */
+  #ticket-impresion, #ticket-impresion * {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Configuración física de la hoja */
+  @page {
+    size: 80mm auto; /* Ancho 80mm, largo automático */
+    margin: 0;       /* Sin márgenes blancos */
+  }
+
+  /* Diseño del Ticket */
+  #ticket-impresion {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm; /* Ancho exacto */
+    background-color: white;
+    color: black;
+    font-family: 'Courier New', Courier, monospace; /* Fuente tipo ticket */
+    padding: 5mm;
+    font-size: 16px; /* Letra legible */
+    line-height: 1.2;
+  }
+
+  /* Utilidades para negritas y alineación dentro del ticket */
+  .ticket-centrado { text-align: center; }
+  .ticket-derecha { text-align: right; }
+  .ticket-negrita { font-weight: bold; }
+  .ticket-grande { font-size: 20px; font-weight: bold; }
+  .ticket-linea { border-bottom: 1px dashed black; margin: 5px 0; }
+}
