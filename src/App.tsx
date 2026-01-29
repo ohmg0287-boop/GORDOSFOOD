@@ -619,6 +619,53 @@ useEffect(() => {
         )}
       </div>
       <style>{` @media print { .no-print { display: none !important; } body { background: white; } #reporte-imprimible { box-shadow: none; } } `}</style>
+   {/* --- TICKET DE 80MM (Usando lastOrderTicket) --- */}
+{/* El "&&" asegura que solo intente leer si existe el ticket, para evitar pantalla blanca */}
+{lastOrderTicket && (
+  <div id="ticket-impresion">
+    
+    {/* ENCABEZADO */}
+    <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
+    <div className="ticket-centrado">Soluciones Tecno Educativas M&F</div>
+    <div className="ticket-linea"></div>
+    
+    {/* DATOS GENERALES */}
+    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span>FECHA: {new Date().toLocaleDateString()}</span>
+        <span>HORA: {new Date().toLocaleTimeString()}</span>
     </div>
+    
+    {/* Intentamos sacar la mesa si existe en el objeto */}
+    {lastOrderTicket.serviceInfo && (
+       <div className="ticket-negrita" style={{ marginTop: '5px' }}>
+          {lastOrderTicket.serviceInfo.type}: {lastOrderTicket.serviceInfo.val}
+       </div>
+    )}
+
+    <div className="ticket-linea"></div>
+    <div className="ticket-centrado ticket-negrita">ORDEN DE COCINA</div>
+    <div className="ticket-linea"></div>
+
+    {/* LISTA DE PRODUCTOS */}
+    {/* Usamos el ? para que si items no existe, no explote */}
+    <div className="lista-productos">
+      {lastOrderTicket.items?.map((item: any, index: number) => (
+        <div key={index} style={{ marginBottom: '5px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                {/* Asumo que usas 'quantity' y 'name'. Si usas 'cantidad' o 'nombre', avísame */}
+                <span className="ticket-negrita" style={{ fontSize: '18px' }}>
+                    {item.quantity || item.cantidad} x {item.name || item.nombre}
+                </span>
+            </div>
+            {/* Si tienes notas o detalles, irían aquí */}
+        </div>
+      ))}
+    </div>
+
+    <div className="ticket-linea"></div>
+    <br />
+    <div className="ticket-centrado">*** FIN DE LA ORDEN ***</div>
+  </div>
+)} </div>
   );
 }
