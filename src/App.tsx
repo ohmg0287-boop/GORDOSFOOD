@@ -68,17 +68,17 @@ export default function DondeManoloApp() {
   const [reportFilter, setReportFilter] = useState('today'); 
   const [paymentBreakdown, setPaymentBreakdown] = useState({});
 
- // CAMBIO: Ahora Caja y Gerencia también refrescan pedidos automáticamente
+ // Auto-refresco
 useEffect(() => {
   if (user) {
     loadData();
-    // Agregamos 'caja', 'owner' y 'manager' al auto-refresco cada 5 segundos
     if (user.role === 'cocina' || user.role === 'caja' || user.role === 'owner' || user.role === 'manager') {
       const i = setInterval(fetchOrders, 5000);
       return () => clearInterval(i);
     }
   }
 }, [user]);
+
   // --- CARGA DE DATOS ---
   const fetchRate = async () => {
     const { data } = await supabase.from('settings').select('value').eq('key', 'tasa').maybeSingle();
@@ -92,7 +92,6 @@ useEffect(() => {
     const o = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
     const e = await supabase.from('expenses').select('*').order('date', { ascending: false });
     
-    // Solo cargamos staff si es dueño (owner)
     if (user && user.role === 'owner') {
         const s = await supabase.from('staff').select('*').order('name');
         if (s.data) setStaffList(s.data);
@@ -110,21 +109,16 @@ useEffect(() => {
     if (data) setOrders(data);
   };
 
-  // --- LOGIN CORREGIDO ---
+  // --- LOGIN ---
   const login = async (pin) => {
-    // Usamos maybeSingle para evitar crash si hay duplicados, aunque no debería.
     const { data, error } = await supabase.from('staff').select('*').eq('pin', pin).maybeSingle();
-    
     if (error || !data) {
       alert("PIN Incorrecto o Usuario no encontrado");
       return;
     }
-
     setUser(data);
-    
-    // MAPEO EXACTO SEGÚN TU TABLA DE SUPABASE
-    if (data.role === 'owner') setView('dashboard');      // Dueño Total
-    else if (data.role === 'manager') setView('dashboard'); // Gerencia (Admin limitado)
+    if (data.role === 'owner') setView('dashboard');
+    else if (data.role === 'manager') setView('dashboard');
     else if (data.role === 'caja') setView('caja');
     else if (data.role === 'mesero') setView('pedidos');
     else if (data.role === 'cocina') setView('cocina');
@@ -165,7 +159,7 @@ useEffect(() => {
       }
     }
     
-    // Generar Ticket para Impresión
+    // Generar Ticket para Impresión (AQUI SE GUARDA LA DATA PARA EL TICKET DE ABAJO)
     setLastOrderTicket({ ...order, items: items });
 
     setCart([]); setServiceInfo({ type: 'Mesa', val: '' }); loadData(); setLoading(false);
@@ -187,7 +181,7 @@ useEffect(() => {
     setSelectedOrder(null); setCurrentPayments([]); fetchOrders(); setLoading(false);
   };
 
-  // --- GESTIÓN (DUEÑO) ---
+  // --- GESTIÓN ---
   const registerExpenseTransaction = async () => {
     if (!newExpense.desc || !newExpense.amount) return alert("Faltan datos");
     setLoading(true);
@@ -235,7 +229,7 @@ useEffect(() => {
       loadData();
   };
 
-  // --- LÓGICA DE REPORTES ---
+  // --- REPORTES ---
   const getFilteredData = () => {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -273,27 +267,16 @@ useEffect(() => {
   }, [view, reportFilter, orders]);
 
 
-  // --- INTERFAZ LOGIN (BOTONES SEPARADOS) ---
+  // --- UI START ---
   if (!user) return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
       <h1 className="text-4xl font-bold mb-8 text-yellow-500">DONDE MANOLO</h1>
       <div className="grid grid-cols-2 gap-6 w-full max-w-md px-4">
-        {/* BOTONES INDIVIDUALES Y CLAROS */}
-        <button onClick={() => { const p = prompt("PIN Dueño:"); if(p) login(p); }} className="p-6 bg-yellow-600 rounded-xl hover:bg-yellow-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">
-             👑 DUEÑO
-        </button>
-        <button onClick={() => { const p = prompt("PIN Gerencia:"); if(p) login(p); }} className="p-6 bg-blue-600 rounded-xl hover:bg-blue-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">
-             👔 GERENCIA
-        </button>
-        <button onClick={() => { const p = prompt("PIN Caja:"); if(p) login(p); }} className="p-6 bg-green-600 rounded-xl hover:bg-green-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">
-             💵 CAJA
-        </button>
-        <button onClick={() => { const p = prompt("PIN Mesero:"); if(p) login(p); }} className="p-6 bg-purple-600 rounded-xl hover:bg-purple-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">
-             🍽️ MESERO
-        </button>
-        <button onClick={() => { const p = prompt("PIN Cocina:"); if(p) login(p); }} className="col-span-2 p-4 bg-gray-700 rounded-xl hover:bg-gray-600 font-bold border border-gray-500">
-             🔥 COCINA
-        </button>
+        <button onClick={() => { const p = prompt("PIN Dueño:"); if(p) login(p); }} className="p-6 bg-yellow-600 rounded-xl hover:bg-yellow-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">👑 DUEÑO</button>
+        <button onClick={() => { const p = prompt("PIN Gerencia:"); if(p) login(p); }} className="p-6 bg-blue-600 rounded-xl hover:bg-blue-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">👔 GERENCIA</button>
+        <button onClick={() => { const p = prompt("PIN Caja:"); if(p) login(p); }} className="p-6 bg-green-600 rounded-xl hover:bg-green-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">💵 CAJA</button>
+        <button onClick={() => { const p = prompt("PIN Mesero:"); if(p) login(p); }} className="p-6 bg-purple-600 rounded-xl hover:bg-purple-500 text-lg font-bold shadow-lg transform hover:scale-105 transition">🍽️ MESERO</button>
+        <button onClick={() => { const p = prompt("PIN Cocina:"); if(p) login(p); }} className="col-span-2 p-4 bg-gray-700 rounded-xl hover:bg-gray-600 font-bold border border-gray-500">🔥 COCINA</button>
       </div>
     </div>
   );
@@ -321,82 +304,29 @@ useEffect(() => {
         </div>
       </nav>
 
-      {/* --- TICKET MODAL --- */}
-{lastOrderTicket && (
-  <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center">
-    
-    {/* 1. ESTE ES EL TICKET INVISIBLE QUE SE IMPRIME (Solo para la impresora) */}
-    <div className="hidden">
-      <div id="ticket-print" style={{ width: '58mm', textAlign: 'center', color: 'black', background: 'white' }}>
-        <div style={{ fontWeight: 'bold', fontSize: '18px' }}>*** COCINA ***</div>
-        <div style={{ fontSize: '12px' }}>{new Date().toLocaleTimeString()}</div>
-        
-        {/* Mesa en Grande */}
-        <div style={{ fontSize: '30px', fontWeight: '900', border: '2px solid black', margin: '5px 0' }}>
-          {lastOrderTicket.info}
-        </div>
-
-        <div style={{ borderTop: '1px dashed black', margin: '5px 0' }}></div>
-
-        {/* Productos en Grande para el Cocinero */}
-        <div style={{ textAlign: 'left' }}>
-          {lastOrderTicket.items.map((item, idx) => (
-            <div key={idx} style={{ marginBottom: '8px' }}>
-              <div style={{ fontSize: '20px', fontWeight: 'bold' }}>
-                {item.quantity} x {item.product_name}
-              </div>
-              {item.notes && (
-                <div style={{ fontSize: '14px', fontStyle: 'italic', marginLeft: '10px' }}>
-                  ** {item.notes}
+      {/* --- MODAL DE CONFIRMACIÓN (SOLO VISTA) --- */}
+      {lastOrderTicket && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center no-print">
+            <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl rounded-lg">
+                <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">ORDEN CREADA</div>
+                <div className="mb-2">MESA: <span className="font-bold">{lastOrderTicket.info}</span></div>
+                
+                <div className="mt-4 flex flex-col gap-2">
+                    <button onClick={() => window.print()} className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">
+                        🖨️ IMPRIMIR TICKET
+                    </button>
+                    <button onClick={() => setLastOrderTicket(null)} className="bg-gray-200 text-black p-2 rounded font-semibold text-sm">
+                        CERRAR
+                    </button>
                 </div>
-              )}
             </div>
-          ))}
         </div>
+      )}
 
-        <div style={{ borderTop: '1px dashed black', margin: '10px 0' }}></div>
-        <div style={{ fontSize: '12px', fontWeight: 'bold' }}>--- FIN DE ORDEN ---</div>
-        <br />.
-      </div>
-    </div>
-
-    {/* 2. ESTE ES EL MODAL QUE VES EN PANTALLA (No se imprime) */}
-    <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl rounded-lg">
-        <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">VISTA PREVIA</div>
-        <div className="mb-2">MESA/CLIENTE: <span className="font-bold">{lastOrderTicket.info}</span></div>
-        <div className="mb-2">FECHA: {new Date().toLocaleTimeString()}</div>
-        <div className="border-b border-dashed mb-2"></div>
-        
-        <div className="max-h-60 overflow-y-auto">
-            {lastOrderTicket.items.map((item, idx) => (
-                <div key={idx} className="mb-1 border-b border-gray-100 pb-1">
-                    <div className="font-bold text-base">{item.quantity} x {item.product_name}</div>
-                    {item.notes && <div className="text-xs italic text-blue-600">Nota: {item.notes}</div>}
-                </div>
-            ))}
-        </div>
-
-        <div className="mt-4 flex flex-col gap-2">
-            <button 
-                onClick={() => window.print()} 
-                className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">
-                👨‍🍳 ENVIAR A COCINA
-            </button>
-            <button 
-                onClick={() => setLastOrderTicket(null)} 
-                className="bg-gray-200 text-black p-2 rounded font-semibold text-sm">
-                CERRAR
-            </button>
-        </div>
-    </div>
-  </div>
-)}
+      {/* --- DASHBOARD --- */}
       <div className="max-w-7xl mx-auto p-4">
-        
-        {/* --- DASHBOARD --- */}
         {view === 'dashboard' && (
             <div className="space-y-6">
-                {/* TASA */}
                 <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500 flex justify-between items-center">
                     <div><h2 className="text-xl font-bold text-gray-700">Tasa del día</h2></div>
                     <div className="flex gap-4 items-center">
@@ -405,8 +335,6 @@ useEffect(() => {
                         <button onClick={async () => { await supabase.from('settings').upsert({ key:'tasa', value: { usd: tasa }}); alert("Guardado"); }} className="bg-blue-600 text-white px-4 py-2 rounded font-bold"><Save size={20}/></button>
                     </div>
                 </div>
-
-                {/* GASTOS */}
                 <div className="bg-white p-6 rounded-lg shadow-md">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingDown className="text-red-500"/> Registrar Compra/Gasto</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded">
@@ -433,8 +361,6 @@ useEffect(() => {
                         <button onClick={registerExpenseTransaction} className="md:col-span-2 bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700">Registrar Salida</button>
                     </div>
                 </div>
-
-                {/* PERSONAL - SOLO VISIBLE PARA EL OWNER */}
                 {user.role === 'owner' ? (
                     <div className="bg-white p-6 rounded-lg shadow-md">
                         <div className="flex justify-between items-center mb-4">
@@ -468,14 +394,11 @@ useEffect(() => {
                         <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2 rounded flex items-center gap-2"><Printer size={16}/> Imprimir</button>
                     </div>
                 </div>
-
-                {/* VISTA DE IMPRESIÓN */}
                 <div className="bg-white p-8 rounded shadow-lg" id="reporte-imprimible">
                     <div className="text-center mb-6 border-b pb-4">
                         <h1 className="text-2xl font-bold">REPORTE DE GESTIÓN</h1>
                         <p className="text-gray-500 capitalize">Periodo: {reportFilter}</p>
                     </div>
-                    {/* Resumen Métodos de Pago */}
                     <div className="mb-8">
                         <h3 className="font-bold border-b mb-2">Ingresos por Método de Pago</h3>
                         <div className="grid grid-cols-3 gap-4">
@@ -490,7 +413,6 @@ useEffect(() => {
                              Total Ventas: ${Object.values(paymentBreakdown).reduce((a,b)=>a+b, 0).toFixed(2)}
                         </div>
                     </div>
-                    {/* Gastos */}
                     <div>
                         <h3 className="font-bold border-b mb-2">Gastos Registrados</h3>
                         <table className="w-full text-sm">
@@ -527,7 +449,6 @@ useEffect(() => {
                                     <td className="p-3">{ing.name}</td>
                                     <td className={`p-3 font-bold ${ing.stock < 10 ? 'text-red-600' : 'text-gray-800'}`}>{Number(ing.stock).toFixed(2)}</td>
                                     <td className="p-3 text-sm text-gray-500">{ing.unit}</td>
-                                    {/* SOLO EL OWNER PUEDE VER EL BOTÓN EDITAR */}
                                     {user.role === 'owner' && (
                                         <td className="p-3 no-print"><button onClick={async () => { const val = prompt(`Nuevo stock para ${ing.name}:`, ing.stock); if(val) { await supabase.from('ingredients').update({stock: val}).eq('id', ing.id); loadData(); }}} className="text-blue-600 hover:text-blue-800"><Edit3 size={18}/></button></td>
                                     )}
@@ -546,8 +467,7 @@ useEffect(() => {
                     <h2 className="font-bold text-xl mb-4">Menú</h2>
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                         {products.map(p => (
-                            <div key={p.id} onClick={() => setCart([...cart, { ...p, tempId: Math.random() }])} 
-                                className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition">
+                            <div key={p.id} onClick={() => setCart([...cart, { ...p, tempId: Math.random() }])} className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition">
                                 <h3 className="font-bold text-gray-800">{p.name}</h3>
                                 <p className="text-green-600 font-bold">${p.price_usd}</p>
                             </div>
@@ -618,54 +538,60 @@ useEffect(() => {
             </div>
         )}
       </div>
-      <style>{` @media print { .no-print { display: none !important; } body { background: white; } #reporte-imprimible { box-shadow: none; } } `}</style>
-   {/* --- TICKET DE 80MM (Usando lastOrderTicket) --- */}
-{/* El "&&" asegura que solo intente leer si existe el ticket, para evitar pantalla blanca */}
-{lastOrderTicket && (
-  <div id="ticket-impresion">
-    
-    {/* ENCABEZADO */}
-    <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
-    <div className="ticket-centrado">Soluciones Tecno Educativas M&F</div>
-    <div className="ticket-linea"></div>
-    
-    {/* DATOS GENERALES */}
-    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span>FECHA: {new Date().toLocaleDateString()}</span>
-        <span>HORA: {new Date().toLocaleTimeString()}</span>
-    </div>
-    
-    {/* Intentamos sacar la mesa si existe en el objeto */}
-    {lastOrderTicket.serviceInfo && (
-       <div className="ticket-negrita" style={{ marginTop: '5px' }}>
-          {lastOrderTicket.serviceInfo.type}: {lastOrderTicket.serviceInfo.val}
-       </div>
-    )}
 
-    <div className="ticket-linea"></div>
-    <div className="ticket-centrado ticket-negrita">ORDEN DE COCINA</div>
-    <div className="ticket-linea"></div>
+      {/* --- ESTILOS DE IMPRESIÓN (SEGURIDAD EXTRA) --- */}
+      <style>{`
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; }
+            #reporte-imprimible { box-shadow: none; margin: 0; padding: 0; }
+        }
+      `}</style>
 
-    {/* LISTA DE PRODUCTOS */}
-    {/* Usamos el ? para que si items no existe, no explote */}
-    <div className="lista-productos">
-      {lastOrderTicket.items?.map((item: any, index: number) => (
-        <div key={index} style={{ marginBottom: '5px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                {/* Asumo que usas 'quantity' y 'name'. Si usas 'cantidad' o 'nombre', avísame */}
-                <span className="ticket-negrita" style={{ fontSize: '18px' }}>
-                    {item.quantity || item.cantidad} x {item.name || item.nombre}
-                </span>
-            </div>
-            {/* Si tienes notas o detalles, irían aquí */}
+    {/* --- TICKET DE 80MM CORREGIDO --- */}
+    {lastOrderTicket && (
+      <div id="ticket-impresion">
+        
+        {/* ENCABEZADO */}
+        <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
+        <div className="ticket-centrado">Soluciones Tecno Educativas M&F</div>
+        <div className="ticket-linea"></div>
+        
+        {/* DATOS GENERALES */}
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>FECHA: {new Date().toLocaleDateString()}</span>
+            <span>HORA: {new Date().toLocaleTimeString()}</span>
         </div>
-      ))}
-    </div>
+        
+        {/* CORREGIDO: Se usa .service_type e .info que vienen de 'lastOrderTicket' */}
+        <div className="ticket-negrita" style={{ marginTop: '5px' }}>
+             {lastOrderTicket.service_type}: {lastOrderTicket.info}
+        </div>
 
-    <div className="ticket-linea"></div>
-    <br />
-    <div className="ticket-centrado">*** FIN DE LA ORDEN ***</div>
-  </div>
-)} </div>
+        <div className="ticket-linea"></div>
+        <div className="ticket-centrado ticket-negrita">ORDEN DE COCINA</div>
+        <div className="ticket-linea"></div>
+
+        {/* LISTA DE PRODUCTOS CORREGIDA */}
+        <div className="lista-productos">
+          {lastOrderTicket.items?.map((item, index) => (
+            <div key={index} style={{ marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    {/* CORREGIDO: Se usa .product_name en lugar de .name */}
+                    <span className="ticket-negrita" style={{ fontSize: '18px' }}>
+                        {item.quantity} x {item.product_name}
+                    </span>
+                </div>
+                {item.notes && <div style={{ fontSize: '12px', fontStyle: 'italic' }}>(Nota: {item.notes})</div>}
+            </div>
+          ))}
+        </div>
+
+        <div className="ticket-linea"></div>
+        <br />
+        <div className="ticket-centrado">*** FIN DE LA ORDEN ***</div>
+      </div>
+    )}
+    </div>
   );
 }
