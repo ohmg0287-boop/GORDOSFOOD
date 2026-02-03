@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText } from 'lucide-react';
 
 // --- CONEXIÓN ---
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
@@ -56,7 +56,8 @@ export default function DondeManoloApp() {
   const [cart, setCart] = useState([]);
   const [serviceInfo, setServiceInfo] = useState({ type: 'Mesa', val: '' });
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [lastOrderTicket, setLastOrderTicket] = useState(null); 
+  const [lastOrderTicket, setLastOrderTicket] = useState(null);
+  const [closingData, setClosingData] = useState(null); 
   
   // Caja y Gastos
   const [payAmount, setPayAmount] = useState('');
@@ -159,8 +160,8 @@ useEffect(() => {
       }
     }
     
-    // Generar Ticket para Impresión (AQUI SE GUARDA LA DATA PARA EL TICKET DE ABAJO)
     setLastOrderTicket({ ...order, items: items });
+    setClosingData(null); // Asegura que no se imprima el reporte, sino el ticket
 
     setCart([]); setServiceInfo({ type: 'Mesa', val: '' }); loadData(); setLoading(false);
   };
@@ -181,11 +182,72 @@ useEffect(() => {
     setSelectedOrder(null); setCurrentPayments([]); fetchOrders(); setLoading(false);
   };
 
-  // --- GESTIÓN ---
+  // --- GESTIÓN DE CIERRE ---
+  const handleDailyClose = async () => {
+    setLoading(true);
+    // Lógica: Día operativo 6AM a 6AM
+    const now = new Date();
+    const shiftStart = new Date(now);
+    
+    if (now.getHours() < 6) {
+        shiftStart.setDate(shiftStart.getDate() - 1);
+    }
+    shiftStart.setHours(6, 0, 0, 0); 
+    const shiftEnd = new Date(shiftStart);
+    shiftEnd.setDate(shiftEnd.getDate() + 1);
+
+    const shiftOrders = orders.filter(o => {
+        const d = new Date(o.created_at);
+        return d >= shiftStart && d < shiftEnd && o.status === 'pagado';
+    });
+
+    const shiftExpenses = expenses.filter(e => {
+        const d = new Date(e.date);
+        return d >= shiftStart && d < shiftEnd;
+    });
+
+    const orderIds = shiftOrders.map(o => o.id);
+    let shiftPayments = [];
+    if (orderIds.length > 0) {
+        const { data } = await supabase.from('payments').select('*').in('order_id', orderIds);
+        if (data) shiftPayments = data;
+    }
+
+    const totalSales = shiftOrders.reduce((sum, o) => sum + o.total_usd, 0);
+    const totalExpenses = shiftExpenses.reduce((sum, e) => sum + e.amount, 0);
+    
+    const breakdown = shiftPayments.reduce((acc, curr) => {
+        acc[curr.method] = (acc[curr.method] || 0) + curr.amount_usd;
+        return acc;
+    }, {});
+
+    const cashInUsd = breakdown['usd_efectivo'] || 0;
+    const cashInBs = shiftPayments.filter(p => p.method === 'bs_efectivo').reduce((s, p) => s + p.amount_bs, 0);
+
+    const reportData = {
+        dateStr: shiftStart.toLocaleDateString(),
+        printDate: now.toLocaleString(),
+        sales: totalSales,
+        expenses: totalExpenses,
+        net: totalSales - totalExpenses,
+        breakdown,
+        cashInUsd,
+        cashInBs,
+        expensesList: shiftExpenses,
+        orderCount: shiftOrders.length
+    };
+
+    setClosingData(reportData);
+    setLastOrderTicket(null); // Asegura que no se imprima ticket de comida
+    setLoading(false);
+    
+    setTimeout(() => window.print(), 500);
+  };
+
+  // --- GESTIÓN GENERAL ---
   const registerExpenseTransaction = async () => {
     if (!newExpense.desc || !newExpense.amount) return alert("Faltan datos");
     setLoading(true);
-    
     await supabase.from('expenses').insert([{
         description: newExpense.desc,
         amount: parseFloat(newExpense.amount),
@@ -200,7 +262,6 @@ useEffect(() => {
             await supabase.from('ingredients').update({ stock: newStock }).eq('id', ing.id);
         }
     }
-
     alert("Registrado correctamente");
     setNewExpense({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' });
     loadData(); setLoading(false);
@@ -229,7 +290,7 @@ useEffect(() => {
       loadData();
   };
 
-  // --- REPORTES ---
+  // --- REPORTES VIEJOS ---
   const getFilteredData = () => {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -252,7 +313,6 @@ useEffect(() => {
               const { filteredOrders } = getFilteredData();
               const ids = filteredOrders.map(o => o.id);
               if(ids.length === 0) { setPaymentBreakdown({}); return; }
-              
               const { data } = await supabase.from('payments').select('*').in('order_id', ids);
               if(data) {
                   const breakdown = data.reduce((acc, curr) => {
@@ -265,7 +325,6 @@ useEffect(() => {
           fetchPayments();
       }
   }, [view, reportFilter, orders]);
-
 
   // --- UI START ---
   if (!user) return (
@@ -304,20 +363,15 @@ useEffect(() => {
         </div>
       </nav>
 
-      {/* --- MODAL DE CONFIRMACIÓN (SOLO VISTA) --- */}
+      {/* --- MODAL CONFIRMACIÓN PEDIDO --- */}
       {lastOrderTicket && (
         <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center no-print">
             <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl rounded-lg">
                 <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">ORDEN CREADA</div>
                 <div className="mb-2">MESA: <span className="font-bold">{lastOrderTicket.info}</span></div>
-                
                 <div className="mt-4 flex flex-col gap-2">
-                    <button onClick={() => window.print()} className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">
-                        🖨️ IMPRIMIR TICKET
-                    </button>
-                    <button onClick={() => setLastOrderTicket(null)} className="bg-gray-200 text-black p-2 rounded font-semibold text-sm">
-                        CERRAR
-                    </button>
+                    <button onClick={() => window.print()} className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">🖨️ IMPRIMIR TICKET</button>
+                    <button onClick={() => setLastOrderTicket(null)} className="bg-gray-200 text-black p-2 rounded font-semibold text-sm">CERRAR</button>
                 </div>
             </div>
         </div>
@@ -387,20 +441,33 @@ useEffect(() => {
         {(view === 'reportes' || (view === 'caja' && user.role === 'caja')) && (
             <div className="space-y-6">
                 <div className="bg-white p-6 rounded shadow-lg no-print">
+                     {/* BOTÓN DE CIERRE DEL DÍA */}
+                     {user.role !== 'mesero' && (
+                        <div className="mb-6 p-4 bg-orange-100 rounded border border-orange-300 flex justify-between items-center">
+                            <div>
+                                <h3 className="font-bold text-orange-900 text-lg">Cierre de Caja Operativo</h3>
+                                <p className="text-sm text-orange-800">Corta a las 6:00 AM del día siguiente. Genera PDF Carta.</p>
+                            </div>
+                            <button onClick={handleDailyClose} className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-bold shadow flex items-center gap-2">
+                                <FileText size={20}/> GENERAR REPORTE PDF
+                            </button>
+                        </div>
+                     )}
+
                     <div className="flex gap-4 justify-center mb-6">
                         <button onClick={() => setReportFilter('today')} className={`px-4 py-2 rounded font-bold ${reportFilter==='today'?'bg-blue-600 text-white':'bg-gray-200'}`}>Hoy</button>
                         <button onClick={() => setReportFilter('week')} className={`px-4 py-2 rounded font-bold ${reportFilter==='week'?'bg-blue-600 text-white':'bg-gray-200'}`}>Semana</button>
                         <button onClick={() => setReportFilter('month')} className={`px-4 py-2 rounded font-bold ${reportFilter==='month'?'bg-blue-600 text-white':'bg-gray-200'}`}>Mes</button>
-                        <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2 rounded flex items-center gap-2"><Printer size={16}/> Imprimir</button>
+                        <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2 rounded flex items-center gap-2"><Printer size={16}/> Imprimir Vista</button>
                     </div>
                 </div>
                 <div className="bg-white p-8 rounded shadow-lg" id="reporte-imprimible">
                     <div className="text-center mb-6 border-b pb-4">
-                        <h1 className="text-2xl font-bold">REPORTE DE GESTIÓN</h1>
-                        <p className="text-gray-500 capitalize">Periodo: {reportFilter}</p>
+                        <h1 className="text-2xl font-bold">REPORTE (VISTA PREVIA)</h1>
+                        <p className="text-gray-500 capitalize">Filtro: {reportFilter}</p>
                     </div>
                     <div className="mb-8">
-                        <h3 className="font-bold border-b mb-2">Ingresos por Método de Pago</h3>
+                        <h3 className="font-bold border-b mb-2">Ingresos por Método</h3>
                         <div className="grid grid-cols-3 gap-4">
                             {Object.entries(paymentBreakdown).map(([method, amount]) => (
                                 <div key={method} className="bg-green-50 p-2 rounded border border-green-200 text-center">
@@ -409,12 +476,9 @@ useEffect(() => {
                                 </div>
                             ))}
                         </div>
-                        <div className="mt-4 text-right text-xl font-bold text-green-700">
-                             Total Ventas: ${Object.values(paymentBreakdown).reduce((a,b)=>a+b, 0).toFixed(2)}
-                        </div>
                     </div>
                     <div>
-                        <h3 className="font-bold border-b mb-2">Gastos Registrados</h3>
+                        <h3 className="font-bold border-b mb-2">Gastos</h3>
                         <table className="w-full text-sm">
                              <tbody>
                                  {getFilteredData().filteredExpenses.map(e => (
@@ -551,47 +615,106 @@ useEffect(() => {
     {/* --- TICKET DE 80MM CORREGIDO --- */}
     {lastOrderTicket && (
       <div id="ticket-impresion">
-        
-        {/* ENCABEZADO */}
         <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
         <div className="ticket-centrado">Soluciones Tecno Educativas M&F</div>
         <div className="ticket-linea"></div>
-        
-        {/* DATOS GENERALES */}
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>FECHA: {new Date().toLocaleDateString()}</span>
             <span>HORA: {new Date().toLocaleTimeString()}</span>
         </div>
-        
-        {/* CORREGIDO: Se usa .service_type e .info que vienen de 'lastOrderTicket' */}
-        <div className="ticket-negrita" style={{ marginTop: '5px' }}>
-             {lastOrderTicket.service_type}: {lastOrderTicket.info}
-        </div>
-
+        <div className="ticket-negrita" style={{ marginTop: '5px' }}>{lastOrderTicket.service_type}: {lastOrderTicket.info}</div>
         <div className="ticket-linea"></div>
         <div className="ticket-centrado ticket-negrita">ORDEN DE COCINA</div>
         <div className="ticket-linea"></div>
-
-        {/* LISTA DE PRODUCTOS CORREGIDA */}
         <div className="lista-productos">
           {lastOrderTicket.items?.map((item, index) => (
             <div key={index} style={{ marginBottom: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    {/* CORREGIDO: Se usa .product_name en lugar de .name */}
-                    <span className="ticket-negrita" style={{ fontSize: '18px' }}>
-                        {item.quantity} x {item.product_name}
-                    </span>
+                    <span className="ticket-negrita" style={{ fontSize: '18px' }}>{item.quantity} x {item.product_name}</span>
                 </div>
                 {item.notes && <div style={{ fontSize: '12px', fontStyle: 'italic' }}>(Nota: {item.notes})</div>}
             </div>
           ))}
         </div>
-
         <div className="ticket-linea"></div>
         <br />
         <div className="ticket-centrado">*** FIN DE LA ORDEN ***</div>
       </div>
     )}
+
+    {/* --- DOCUMENTO DE CIERRE CARTA/PDF --- */}
+    {closingData && (
+        <div id="cierre-impresion" className="p-8 font-sans">
+            <div className="border-b-2 border-black pb-4 mb-6 flex justify-between items-end">
+                <div>
+                    <h1 className="text-4xl font-bold text-gray-800">REPORTE DE CIERRE</h1>
+                    <p className="text-xl text-gray-600">Donde Manolo</p>
+                </div>
+                <div className="text-right">
+                    <p><strong>Fecha Operativa:</strong> {closingData.dateStr}</p>
+                    <p className="text-sm text-gray-500">Impreso: {closingData.printDate}</p>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8 mb-8">
+                <div className="border rounded p-4 bg-gray-50">
+                    <h3 className="font-bold text-lg mb-4 border-b border-gray-300 pb-2">RESUMEN FINANCIERO</h3>
+                    <div className="flex justify-between text-lg mb-2">
+                        <span>Ventas Totales:</span>
+                        <span className="font-bold text-green-700">${closingData.sales.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-lg mb-2">
+                        <span>Gastos Operativos:</span>
+                        <span className="text-red-600">-${closingData.expenses.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xl font-bold mt-4 pt-4 border-t border-black">
+                        <span>GANANCIA NETA:</span>
+                        <span>${closingData.net.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div className="border rounded p-4 bg-gray-50">
+                     <h3 className="font-bold text-lg mb-4 border-b border-gray-300 pb-2">DESGLOSE DE MÉTODOS</h3>
+                     <table className="w-full">
+                         <tbody>
+                            {Object.entries(closingData.breakdown).map(([method, amount]) => (
+                                <tr key={method} className="border-b border-gray-200">
+                                    <td className="py-1 capitalize">{method.replace('_', ' ')}</td>
+                                    <td className="py-1 text-right font-bold">${amount.toFixed(2)}</td>
+                                </tr>
+                            ))}
+                         </tbody>
+                     </table>
+                </div>
+            </div>
+
+            <div className="mb-8 border rounded p-4">
+                 <h3 className="font-bold text-lg mb-4">ARQUEO DE CAJA FÍSICA (Dinero en Gaveta)</h3>
+                 <div className="flex justify-around text-center">
+                    <div className="p-4 bg-green-50 rounded border w-1/3">
+                        <div className="text-gray-500 text-sm">EFECTIVO USD</div>
+                        <div className="text-3xl font-bold text-green-800">${closingData.cashInUsd.toFixed(2)}</div>
+                    </div>
+                    <div className="p-4 bg-blue-50 rounded border w-1/3">
+                        <div className="text-gray-500 text-sm">EFECTIVO BOLÍVARES</div>
+                        <div className="text-3xl font-bold text-blue-800">Bs {closingData.cashInBs.toFixed(2)}</div>
+                    </div>
+                 </div>
+            </div>
+            
+            <div className="mt-12 pt-12 border-t-2 border-black flex justify-between">
+                <div className="text-center w-64">
+                    <div className="border-b border-black mb-2"></div>
+                    <p className="font-bold">Firma Gerencia</p>
+                </div>
+                <div className="text-center w-64">
+                    <div className="border-b border-black mb-2"></div>
+                    <p className="font-bold">Firma Cajero/a</p>
+                </div>
+            </div>
+        </div>
+    )}
+
     </div>
   );
 }
