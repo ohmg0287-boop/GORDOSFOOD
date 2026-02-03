@@ -27,7 +27,7 @@
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 4.8% 95.9%;
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
@@ -66,66 +66,60 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
 }
 
-/* =========================================
-   ESTILOS DE IMPRESIÓN (TICKET 80MM)
-   ========================================= */
-
-/* 1. Por defecto, ocultamos el ticket en pantalla normal */
-#ticket-impresion {
+/* Elementos ocultos por defecto en pantalla normal */
+#ticket-impresion, #cierre-impresion {
   display: none;
 }
 
 @media print {
-  /* CORRECCIÓN CLAVE:
-     En lugar de 'display: none' en body > *, usamos 'visibility: hidden' en todo.
-     Esto permite que los hijos (el ticket) puedan hacerse visibles de nuevo.
-  */
-  body * {
-    visibility: hidden;
-  }
+  /* Ocultar toda la interfaz de la app */
+  body * { visibility: hidden; }
 
-  /* Excepción para el ticket: Él y todo su contenido es visible */
+  /* --- ESTILO 1: TICKET TÉRMICO (Cocina) --- */
   #ticket-impresion, #ticket-impresion * {
     visibility: visible;
   }
-
-  /* Forzamos posición absoluta para que salga al inicio de la hoja */
   #ticket-impresion {
     display: block !important;
     position: absolute;
     left: 0;
     top: 0;
-    width: 80mm; /* Ancho standard ticket */
-    background-color: white;
+    width: 80mm; /* Ancho fijo para impresora térmica */
+    background: white;
     color: black;
-    font-family: 'Courier New', Courier, monospace;
-    padding: 0;
-    margin: 0;
+    font-family: 'Courier New', monospace; /* Fuente tipo ticket */
     font-size: 14px;
-    line-height: 1.2;
+    padding-right: 5px;
   }
-
-  /* Configuración de la hoja física */
-  @page {
-    size: 80mm auto;
-    margin: 0;
-  }
-
-  /* Clases utilitarias del ticket */
+  
+  /* Clases específicas para el ticket térmico */
   .ticket-centrado { text-align: center; }
   .ticket-derecha { text-align: right; }
   .ticket-negrita { font-weight: bold; }
   .ticket-grande { font-size: 18px; font-weight: bold; }
   .ticket-linea { border-bottom: 1px dashed black; margin: 5px 0; }
-  
-  /* Aseguramos que nada más estorbe */
+
+  /* --- ESTILO 2: REPORTE CARTA (Cierre de Caja) --- */
+  #cierre-impresion, #cierre-impresion * {
+    visibility: visible;
+  }
+  #cierre-impresion {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%; /* Ocupa todo el ancho de la hoja Carta */
+    background: white;
+    color: black;
+    font-family: Arial, Helvetica, sans-serif; /* Fuente formal */
+    font-size: 12pt;
+    padding: 20px; /* Margen para hoja carta */
+  }
+
+  /* Utilidades para ocultar botones al imprimir */
   .no-print { display: none !important; }
 }
