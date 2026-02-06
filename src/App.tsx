@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText, Search, XCircle, AlertTriangle } from 'lucide-react';
 
 // --- CONEXIÓN ---
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
@@ -57,12 +57,17 @@ export default function DondeManoloApp() {
   const [serviceInfo, setServiceInfo] = useState({ type: 'Mesa', val: '' });
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [lastOrderTicket, setLastOrderTicket] = useState(null);
+  const [ticketType, setTicketType] = useState('full'); 
   const [closingData, setClosingData] = useState(null); 
   
-  // Caja y Gastos
+  // Caja y Modificaciones
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('usd_efectivo');
   const [currentPayments, setCurrentPayments] = useState([]);
+  const [isEditingOrder, setIsEditingOrder] = useState(false); 
+  const [itemSearch, setItemSearch] = useState(''); 
+
+  // Gastos
   const [newExpense, setNewExpense] = useState({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' });
 
   // Reportes
@@ -73,7 +78,8 @@ export default function DondeManoloApp() {
 useEffect(() => {
   if (user) {
     loadData();
-    if (user.role === 'cocina' || user.role === 'caja' || user.role === 'owner' || user.role === 'manager') {
+    // Refresco automatico para roles operativos
+    if (['cocina', 'caja', 'owner', 'manager', 'mesero'].includes(user.role)) {
       const i = setInterval(fetchOrders, 5000);
       return () => clearInterval(i);
     }
@@ -108,6 +114,10 @@ useEffect(() => {
   const fetchOrders = async () => {
     const { data } = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
     if (data) setOrders(data);
+    if (selectedOrder) {
+        const updated = data?.find(o => o.id === selectedOrder.id);
+        if (updated) setSelectedOrder(updated);
+    }
   };
 
   // --- LOGIN ---
@@ -123,13 +133,23 @@ useEffect(() => {
     else if (data.role === 'caja') setView('caja');
     else if (data.role === 'mesero') setView('pedidos');
     else if (data.role === 'cocina') setView('cocina');
-    else {
-        alert("Rol desconocido: " + data.role);
-        setUser(null);
-    }
+    else setUser(null);
   };
 
-  // --- PEDIDOS & TICKET ---
+  // --- CARRITO (CREAR PEDIDO) ---
+  const addToCart = (product) => {
+      // Usamos un ID único basado en el tiempo para evitar duplicados en keys
+      setCart(prev => [...prev, { ...product, tempId: Date.now() + Math.random() }]);
+  };
+
+  const removeFromCart = (tempId) => {
+      setCart(prev => prev.filter(item => item.tempId !== tempId));
+  };
+
+  const updateCartNote = (tempId, note) => {
+      setCart(prev => prev.map(item => item.tempId === tempId ? { ...item, notes: note } : item));
+  };
+
   const sendOrder = async () => {
     if (cart.length === 0 || !serviceInfo.val) return alert("Carrito vacío o falta Mesa/Cliente");
     setLoading(true);
@@ -160,10 +180,94 @@ useEffect(() => {
       }
     }
     
+    setTicketType('full');
     setLastOrderTicket({ ...order, items: items });
-    setClosingData(null); // Asegura que no se imprima el reporte, sino el ticket
-
+    setClosingData(null); 
     setCart([]); setServiceInfo({ type: 'Mesa', val: '' }); loadData(); setLoading(false);
+  };
+
+  // --- MODIFICACIÓN DE ORDENES (EXISTENTES) ---
+  const handleAddItemToOrder = async (product) => {
+      // PERMISOS: Todos pueden agregar cosas (vender más)
+      if (!selectedOrder) return;
+      const confirmAdd = confirm(`¿Agregar ${product.name} a la Mesa ${selectedOrder.info}?`);
+      if (!confirmAdd) return;
+
+      setLoading(true);
+
+      // 1. Agregar Item
+      await supabase.from('order_items').insert([{
+          order_id: selectedOrder.id,
+          product_name: product.name,
+          quantity: 1,
+          price_at_time: product.price_usd,
+          notes: 'ANEXO'
+      }]);
+
+      // 2. Actualizar Total Orden
+      const newTotal = selectedOrder.total_usd + product.price_usd;
+      await supabase.from('orders').update({ 
+          total_usd: newTotal,
+          status: 'pendiente' // Regresa a pendiente para que cocina lo vea
+      }).eq('id', selectedOrder.id);
+
+      // 3. Descontar Inventario
+      const recipe = RECIPES_MATRIX[product.name];
+      if (recipe) {
+          for (let [ingName, qty] of Object.entries(recipe)) {
+              const dbIng = ingredients.find(i => i.name === ingName);
+              if (dbIng) {
+                  await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - qty }).eq('id', dbIng.id);
+              }
+          }
+      }
+
+      alert("Item agregado exitosamente");
+      
+      // Preguntar si quiere ticket
+      if(confirm("¿Imprimir Ticket de Anexo para Cocina?")) {
+          setTicketType('anexo');
+          setLastOrderTicket({
+              ...selectedOrder,
+              items: [{ product_name: product.name, quantity: 1, notes: 'ANEXO / AGREGADO' }]
+          });
+          setTimeout(() => window.print(), 500);
+      }
+      
+      setItemSearch('');
+      fetchOrders();
+      setLoading(false);
+  };
+
+  const handleRemoveItemFromOrder = async (item) => {
+      // PERMISOS: Solo Dueño y Gerente pueden borrar algo ya comandado
+      if (user.role !== 'owner' && user.role !== 'manager') {
+          return alert("⛔ ACCESO DENEGADO: Solo Dueño o Gerente pueden eliminar items ya enviados a cocina.");
+      }
+
+      if (!confirm(`¿Eliminar ${item.product_name} de la cuenta? Esto devolverá el inventario.`)) return;
+      setLoading(true);
+
+      // 1. Borrar Item
+      await supabase.from('order_items').delete().eq('id', item.id);
+
+      // 2. Actualizar Total
+      const newTotal = Math.max(0, selectedOrder.total_usd - item.price_at_time);
+      await supabase.from('orders').update({ total_usd: newTotal }).eq('id', selectedOrder.id);
+
+      // 3. Devolver Inventario
+      const recipe = RECIPES_MATRIX[item.product_name];
+      if (recipe) {
+          for (let [ingName, qty] of Object.entries(recipe)) {
+              const dbIng = ingredients.find(i => i.name === ingName);
+              if (dbIng) {
+                  await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + qty }).eq('id', dbIng.id);
+              }
+          }
+      }
+
+      fetchOrders();
+      setLoading(false);
   };
 
   // --- PAGOS ---
@@ -185,7 +289,6 @@ useEffect(() => {
   // --- GESTIÓN DE CIERRE ---
   const handleDailyClose = async () => {
     setLoading(true);
-    // Lógica: Día operativo 6AM a 6AM
     const now = new Date();
     const shiftStart = new Date(now);
     
@@ -238,7 +341,7 @@ useEffect(() => {
     };
 
     setClosingData(reportData);
-    setLastOrderTicket(null); // Asegura que no se imprima ticket de comida
+    setLastOrderTicket(null); 
     setLoading(false);
     
     setTimeout(() => window.print(), 500);
@@ -290,7 +393,7 @@ useEffect(() => {
       loadData();
   };
 
-  // --- REPORTES VIEJOS ---
+  // --- REPORTES ---
   const getFilteredData = () => {
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -353,21 +456,29 @@ useEffect(() => {
                 <button onClick={() => setView('reportes')} className={`p-2 rounded ${view==='reportes'?'bg-yellow-600':'bg-gray-700'}`}><TrendingUp size={20}/></button>
                 </>
             )}
-            {(user.role === 'owner' || user.role === 'caja' || user.role === 'manager') && (
-                <button onClick={() => setView('caja')} className={`p-2 rounded ${view==='caja'?'bg-yellow-600':'bg-gray-700'}`}><DollarSign size={20}/></button>
+            {/* CAJA/MESAS: Visible para todos los operativos excepto cocina */}
+            {(user.role !== 'cocina') && (
+                <button onClick={() => setView('caja')} className={`p-2 rounded flex items-center gap-2 ${view==='caja'?'bg-yellow-600':'bg-gray-700'}`}>
+                    <DollarSign size={20}/> <span className="text-xs hidden md:inline">CAJA / MESAS</span>
+                </button>
             )}
+            {/* NUEVO PEDIDO: Todos excepto cocina */}
             {user.role !== 'cocina' && (
-                <button onClick={() => setView('pedidos')} className={`p-2 rounded ${view==='pedidos'?'bg-yellow-600':'bg-gray-700'}`}><ShoppingCart size={20}/></button>
+                <button onClick={() => setView('pedidos')} className={`p-2 rounded flex items-center gap-2 ${view==='pedidos'?'bg-yellow-600':'bg-gray-700'}`}>
+                    <ShoppingCart size={20}/> <span className="text-xs hidden md:inline">NUEVO PEDIDO</span>
+                </button>
             )}
             <button onClick={() => window.location.reload()} className="p-2 bg-red-600 rounded"><LogOut size={20}/></button>
         </div>
       </nav>
 
       {/* --- MODAL CONFIRMACIÓN PEDIDO --- */}
-      {lastOrderTicket && (
+      {lastOrderTicket && !closingData && (
         <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center no-print">
             <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl rounded-lg">
-                <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">ORDEN CREADA</div>
+                <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">
+                    {ticketType === 'anexo' ? 'ANEXO / AGREGADO' : 'ORDEN CREADA'}
+                </div>
                 <div className="mb-2">MESA: <span className="font-bold">{lastOrderTicket.info}</span></div>
                 <div className="mt-4 flex flex-col gap-2">
                     <button onClick={() => window.print()} className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">🖨️ IMPRIMIR TICKET</button>
@@ -442,7 +553,7 @@ useEffect(() => {
             <div className="space-y-6">
                 <div className="bg-white p-6 rounded shadow-lg no-print">
                      {/* BOTÓN DE CIERRE DEL DÍA */}
-                     {user.role !== 'mesero' && (
+                     {(user.role === 'owner' || user.role === 'manager' || user.role === 'caja') && (
                         <div className="mb-6 p-4 bg-orange-100 rounded border border-orange-300 flex justify-between items-center">
                             <div>
                                 <h3 className="font-bold text-orange-900 text-lg">Cierre de Caja Operativo</h3>
@@ -524,14 +635,14 @@ useEffect(() => {
             </div>
         )}
 
-        {/* --- PEDIDOS --- */}
+        {/* --- PEDIDOS (NUEVA ORDEN) --- */}
         {view === 'pedidos' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[80vh]">
                 <div className="md:col-span-2 overflow-y-auto bg-white p-4 rounded shadow-lg">
-                    <h2 className="font-bold text-xl mb-4">Menú</h2>
+                    <h2 className="font-bold text-xl mb-4">Menú (Nuevo Pedido)</h2>
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                         {products.map(p => (
-                            <div key={p.id} onClick={() => setCart([...cart, { ...p, tempId: Math.random() }])} className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition">
+                            <div key={p.id} onClick={() => addToCart(p)} className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition transform hover:scale-105">
                                 <h3 className="font-bold text-gray-800">{p.name}</h3>
                                 <p className="text-green-600 font-bold">${p.price_usd}</p>
                             </div>
@@ -539,7 +650,7 @@ useEffect(() => {
                     </div>
                 </div>
                 <div className="bg-white p-4 rounded shadow-lg flex flex-col h-full">
-                    <h2 className="font-bold text-xl mb-2">Orden Actual</h2>
+                    <h2 className="font-bold text-xl mb-2">Comanda Actual</h2>
                     <div className="flex gap-2 mb-4">
                         <select className="border p-2 rounded" onChange={e => setServiceInfo({...serviceInfo, type: e.target.value})}>
                             <option>Mesa</option><option>Para Llevar</option><option>Delivery</option>
@@ -547,16 +658,29 @@ useEffect(() => {
                         <input placeholder="Info Cliente/Mesa" className="border p-2 rounded w-full" onChange={e => setServiceInfo({...serviceInfo, val: e.target.value})} value={serviceInfo.val} />
                     </div>
                     <div className="flex-1 overflow-y-auto border-t border-b py-2 space-y-2">
-                        {cart.map((item, idx) => (
-                            <div key={item.tempId} className="flex justify-between items-start text-sm">
-                                <div><span className="font-bold">{item.name}</span> <div className="text-xs text-gray-500">${item.price_usd}</div><input placeholder="Notas..." className="text-xs border-b w-full mt-1 focus:outline-none" onChange={e => { const newCart = [...cart]; newCart[idx].notes = e.target.value; setCart(newCart); }}/></div>
-                                <button onClick={() => setCart(cart.filter(x => x.tempId !== item.tempId))} className="text-red-500"><Trash2 size={16}/></button>
+                        {cart.length === 0 ? <p className="text-center text-gray-400 mt-4">Carrito vacío</p> : 
+                         cart.map((item) => (
+                            <div key={item.tempId} className="flex justify-between items-start text-sm bg-gray-50 p-2 rounded">
+                                <div>
+                                    <span className="font-bold">{item.name}</span> 
+                                    <div className="text-xs text-gray-500">${item.price_usd}</div>
+                                    <input 
+                                        placeholder="Notas (sin cebolla...)" 
+                                        className="text-xs border-b w-full mt-1 focus:outline-none bg-transparent" 
+                                        value={item.notes || ''}
+                                        onChange={e => updateCartNote(item.tempId, e.target.value)}
+                                    />
+                                </div>
+                                {/* BOTÓN DE ELIMINAR CORREGIDO */}
+                                <button onClick={() => removeFromCart(item.tempId)} className="text-red-500 hover:text-red-700 p-2">
+                                    <Trash2 size={18}/>
+                                </button>
                             </div>
                         ))}
                     </div>
                     <div className="mt-4 pt-4 border-t">
                         <div className="flex justify-between text-xl font-bold mb-4"><span>Total:</span><span>${cart.reduce((s, i) => s + i.price_usd, 0).toFixed(2)}</span></div>
-                        <button onClick={sendOrder} disabled={loading} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 disabled:opacity-50">{loading ? '...' : 'ENVIAR Y TICKET'}</button>
+                        <button onClick={sendOrder} disabled={loading} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 disabled:opacity-50">{loading ? '...' : 'ENVIAR A COCINA'}</button>
                     </div>
                 </div>
             </div>
@@ -575,35 +699,90 @@ useEffect(() => {
             </div>
         )}
         
-        {/* --- CAJA --- */}
+        {/* --- CAJA / MESAS ACTIVAS --- */}
         {view === 'caja' && (
              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-4 rounded shadow">
-                    <div className="flex justify-between items-center mb-4"><h2 className="font-bold text-lg">Por Cobrar</h2>{user.role === 'caja' && <button onClick={() => setView('reportes')} className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded font-bold">Ver Cierre Diario</button>}</div>
+                    <div className="flex justify-between items-center mb-4"><h2 className="font-bold text-lg">Mesas / Pedidos Activos</h2></div>
                     {orders.filter(o => o.status !== 'pagado').map(o => (
-                        <div key={o.id} onClick={() => { setSelectedOrder(o); setCurrentPayments([]); }} className={`p-4 border-b cursor-pointer hover:bg-blue-50 flex justify-between items-center ${selectedOrder?.id === o.id ? 'bg-blue-100 border-l-4 border-blue-600' : ''}`}>
+                        <div key={o.id} onClick={() => { setSelectedOrder(o); setCurrentPayments([]); setIsEditingOrder(false); }} className={`p-4 border-b cursor-pointer hover:bg-blue-50 flex justify-between items-center ${selectedOrder?.id === o.id ? 'bg-blue-100 border-l-4 border-blue-600' : ''}`}>
                             <div><div className="font-bold text-lg">{o.service_type} - {o.info}</div><span className={`text-xs px-2 py-1 rounded ${o.status==='listo'?'bg-green-200 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{o.status.toUpperCase()}</span></div>
-                            <div className="text-right"><div className="font-bold text-xl">${o.total_usd}</div></div>
+                            <div className="text-right"><div className="font-bold text-xl">${o.total_usd.toFixed(2)}</div></div>
                         </div>
                     ))}
                 </div>
+                
                 {selectedOrder && (
                     <div className="bg-white p-6 rounded shadow-lg h-fit sticky top-20">
-                        <h2 className="text-2xl font-bold text-center mb-6 border-b pb-4">Cobrar</h2>
-                        <div className="mb-6 bg-gray-50 p-4 rounded"><div className="flex justify-between text-lg mb-2"><span>Total:</span><span className="font-bold">${selectedOrder.total_usd.toFixed(2)}</span></div><div className="flex justify-between text-lg mb-2 text-blue-600"><span>Bolívares:</span><span className="font-bold">Bs {(selectedOrder.total_usd * tasa).toFixed(2)}</span></div></div>
-                        <div className="mb-6">
-                            <div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option></select></div>
-                            <button onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold">Agregar Pago</button>
+                        <div className="flex justify-between border-b pb-2 mb-4">
+                             {/* SOLO CAJA, GERENTE O DUEÑO VEN LA PESTAÑA COBRAR */}
+                             {(user.role === 'owner' || user.role === 'manager' || user.role === 'caja') && (
+                                <button onClick={() => setIsEditingOrder(false)} className={`flex-1 py-2 font-bold ${!isEditingOrder ? 'border-b-4 border-blue-600 text-blue-800' : 'text-gray-400'}`}>💳 COBRAR</button>
+                             )}
+                             {/* TODOS (INCLUIDO MESERO) VEN EDITAR */}
+                             <button onClick={() => setIsEditingOrder(true)} className={`flex-1 py-2 font-bold ${isEditingOrder || user.role === 'mesero' ? 'border-b-4 border-yellow-500 text-yellow-800' : 'text-gray-400'}`}>✏️ EDITAR / AGREGAR</button>
                         </div>
-                        <div className="space-y-2 mb-6">{currentPayments.map((p, i) => (<div key={i} className="flex justify-between border-b pb-1 text-sm"><span>{p.method}</span><span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span></div>))}</div>
-                        <div className="border-t pt-4"><div className="flex justify-between font-bold text-lg mb-4"><span>Restante:</span>{(() => { const paid = currentPayments.reduce((s, p) => s + p.amount_usd, 0); const rest = selectedOrder.total_usd - paid; return ( <div className="text-right"><div className={rest > 0.01 ? 'text-red-600' : 'text-green-600'}>${Math.max(0, rest).toFixed(2)}</div></div> ) })()}</div><button onClick={handlePayment} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700">FINALIZAR VENTA</button></div>
+                        
+                        {/* MODO COBRAR (SOLO PARA ROLES AUTORIZADOS) */}
+                        {!isEditingOrder && (user.role === 'owner' || user.role === 'manager' || user.role === 'caja') ? (
+                            <>
+                                <div className="mb-6 bg-gray-50 p-4 rounded"><div className="flex justify-between text-lg mb-2"><span>Total:</span><span className="font-bold">${selectedOrder.total_usd.toFixed(2)}</span></div><div className="flex justify-between text-lg mb-2 text-blue-600"><span>Bolívares:</span><span className="font-bold">Bs {(selectedOrder.total_usd * tasa).toFixed(2)}</span></div></div>
+                                <div className="mb-6">
+                                    <div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option></select></div>
+                                    <button onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold">Agregar Pago</button>
+                                </div>
+                                <div className="space-y-2 mb-6">{currentPayments.map((p, i) => (<div key={i} className="flex justify-between border-b pb-1 text-sm"><span>{p.method}</span><span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span></div>))}</div>
+                                <div className="border-t pt-4"><div className="flex justify-between font-bold text-lg mb-4"><span>Restante:</span>{(() => { const paid = currentPayments.reduce((s, p) => s + p.amount_usd, 0); const rest = selectedOrder.total_usd - paid; return ( <div className="text-right"><div className={rest > 0.01 ? 'text-red-600' : 'text-green-600'}>${Math.max(0, rest).toFixed(2)}</div></div> ) })()}</div><button onClick={handlePayment} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700">FINALIZAR VENTA</button></div>
+                            </>
+                        ) : (
+                        /* MODO EDICIÓN (DISPONIBLE PARA MESERO TAMBIEN) */
+                            <>
+                                <div className="mb-4 bg-yellow-50 p-3 rounded text-sm text-yellow-800">
+                                    Agrega items extras. <br/> 
+                                    <strong>Nota:</strong> Solo Gerencia/Dueño pueden eliminar items ya enviados.
+                                </div>
+                                
+                                {/* Lista Actual */}
+                                <div className="max-h-60 overflow-y-auto mb-4 border rounded">
+                                    {selectedOrder.order_items?.map(item => (
+                                        <div key={item.id} className="flex justify-between items-center p-2 border-b bg-white">
+                                            <div>
+                                                <div className="font-bold text-sm">{item.product_name}</div>
+                                                <div className="text-xs text-gray-500">${item.price_at_time}</div>
+                                            </div>
+                                            {/* BOTÓN DE ELIMINAR ORDEN ACTIVA: SOLO DUEÑO O MANAGER */}
+                                            {(user.role === 'owner' || user.role === 'manager') && (
+                                                <button onClick={() => handleRemoveItemFromOrder(item)} className="text-red-500 hover:bg-red-50 p-2 rounded" title="Eliminar (Solo Gerencia)"><XCircle size={20}/></button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Buscador para Agregar */}
+                                <div className="border-t pt-4">
+                                    <h4 className="font-bold mb-2">Agregar Producto (Extras):</h4>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Search className="text-gray-400"/>
+                                        <input className="border p-2 rounded w-full" placeholder="Buscar..." value={itemSearch} onChange={e => setItemSearch(e.target.value)} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 h-32 overflow-y-auto">
+                                        {products.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).map(p => (
+                                            <button key={p.id} onClick={() => handleAddItemToOrder(p)} className="text-xs p-2 border rounded hover:bg-green-50 text-left">
+                                                <div className="font-bold">{p.name}</div>
+                                                <div className="text-green-600">${p.price_usd}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>
         )}
       </div>
 
-      {/* --- ESTILOS DE IMPRESIÓN (SEGURIDAD EXTRA) --- */}
+      {/* --- ESTILOS DE IMPRESIÓN --- */}
       <style>{`
         @media print {
             .no-print { display: none !important; }
@@ -612,8 +791,8 @@ useEffect(() => {
         }
       `}</style>
 
-    {/* --- TICKET DE 80MM CORREGIDO --- */}
-    {lastOrderTicket && (
+    {/* --- TICKET DE 80MM (COCINA Y ANEXOS) --- */}
+    {lastOrderTicket && !closingData && (
       <div id="ticket-impresion">
         <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
         <div className="ticket-centrado">Soluciones Tecno Educativas M&F</div>
@@ -622,9 +801,13 @@ useEffect(() => {
             <span>FECHA: {new Date().toLocaleDateString()}</span>
             <span>HORA: {new Date().toLocaleTimeString()}</span>
         </div>
-        <div className="ticket-negrita" style={{ marginTop: '5px' }}>{lastOrderTicket.service_type}: {lastOrderTicket.info}</div>
+        <div className="ticket-negrita" style={{ marginTop: '5px' }}>
+            {lastOrderTicket.service_type}: {lastOrderTicket.info}
+        </div>
         <div className="ticket-linea"></div>
-        <div className="ticket-centrado ticket-negrita">ORDEN DE COCINA</div>
+        <div className="ticket-centrado ticket-negrita">
+            {ticketType === 'anexo' ? '*** ANEXO / EXTRA ***' : 'ORDEN DE COCINA'}
+        </div>
         <div className="ticket-linea"></div>
         <div className="lista-productos">
           {lastOrderTicket.items?.map((item, index) => (
@@ -638,7 +821,7 @@ useEffect(() => {
         </div>
         <div className="ticket-linea"></div>
         <br />
-        <div className="ticket-centrado">*** FIN DE LA ORDEN ***</div>
+        <div className="ticket-centrado">*** {ticketType === 'anexo' ? 'FIN ANEXO' : 'FIN ORDEN'} ***</div>
       </div>
     )}
 
