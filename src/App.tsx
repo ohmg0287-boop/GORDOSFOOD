@@ -138,7 +138,6 @@ useEffect(() => {
 
   // --- CARRITO (CREAR PEDIDO) ---
   const addToCart = (product) => {
-      // Usamos un ID único basado en el tiempo para evitar duplicados en keys
       setCart(prev => [...prev, { ...product, tempId: Date.now() + Math.random() }]);
   };
 
@@ -188,7 +187,6 @@ useEffect(() => {
 
   // --- MODIFICACIÓN DE ORDENES (EXISTENTES) ---
   const handleAddItemToOrder = async (product) => {
-      // PERMISOS: Todos pueden agregar cosas (vender más)
       if (!selectedOrder) return;
       const confirmAdd = confirm(`¿Agregar ${product.name} a la Mesa ${selectedOrder.info}?`);
       if (!confirmAdd) return;
@@ -240,9 +238,10 @@ useEffect(() => {
   };
 
   const handleRemoveItemFromOrder = async (item) => {
-      // PERMISOS: Solo Dueño y Gerente pueden borrar algo ya comandado
-      if (user.role !== 'owner' && user.role !== 'manager') {
-          return alert("⛔ ACCESO DENEGADO: Solo Dueño o Gerente pueden eliminar items ya enviados a cocina.");
+      // PERMISOS ACTUALIZADOS: Meseros y Cajeras TAMBIEN pueden borrar items individuales
+      const allowedRoles = ['owner', 'manager', 'caja', 'mesero'];
+      if (!allowedRoles.includes(user.role)) {
+          return alert("⛔ ACCESO DENEGADO.");
       }
 
       if (!confirm(`¿Eliminar ${item.product_name} de la cuenta? Esto devolverá el inventario.`)) return;
@@ -671,7 +670,6 @@ useEffect(() => {
                                         onChange={e => updateCartNote(item.tempId, e.target.value)}
                                     />
                                 </div>
-                                {/* BOTÓN DE ELIMINAR CORREGIDO */}
                                 <button onClick={() => removeFromCart(item.tempId)} className="text-red-500 hover:text-red-700 p-2">
                                     <Trash2 size={18}/>
                                 </button>
@@ -738,8 +736,8 @@ useEffect(() => {
                         /* MODO EDICIÓN (DISPONIBLE PARA MESERO TAMBIEN) */
                             <>
                                 <div className="mb-4 bg-yellow-50 p-3 rounded text-sm text-yellow-800">
-                                    Agrega items extras. <br/> 
-                                    <strong>Nota:</strong> Solo Gerencia/Dueño pueden eliminar items ya enviados.
+                                    Agrega o quita items. <br/> 
+                                    <strong>Nota:</strong> No se pueden eliminar ordenes completas.
                                 </div>
                                 
                                 {/* Lista Actual */}
@@ -750,9 +748,9 @@ useEffect(() => {
                                                 <div className="font-bold text-sm">{item.product_name}</div>
                                                 <div className="text-xs text-gray-500">${item.price_at_time}</div>
                                             </div>
-                                            {/* BOTÓN DE ELIMINAR ORDEN ACTIVA: SOLO DUEÑO O MANAGER */}
-                                            {(user.role === 'owner' || user.role === 'manager') && (
-                                                <button onClick={() => handleRemoveItemFromOrder(item)} className="text-red-500 hover:bg-red-50 p-2 rounded" title="Eliminar (Solo Gerencia)"><XCircle size={20}/></button>
+                                            {/* BOTÓN DE ELIMINAR ITEM: AHORA DISPONIBLE PARA TODOS LOS OPERATIVOS */}
+                                            {(user.role === 'owner' || user.role === 'manager' || user.role === 'caja' || user.role === 'mesero') && (
+                                                <button onClick={() => handleRemoveItemFromOrder(item)} className="text-red-500 hover:bg-red-50 p-2 rounded" title="Eliminar Item"><XCircle size={20}/></button>
                                             )}
                                         </div>
                                     ))}
