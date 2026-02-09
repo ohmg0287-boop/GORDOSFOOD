@@ -238,12 +238,7 @@ useEffect(() => {
   };
 
   const handleRemoveItemFromOrder = async (item) => {
-      // PERMISOS ACTUALIZADOS: Meseros y Cajeras TAMBIEN pueden borrar items individuales
-      const allowedRoles = ['owner', 'manager', 'caja', 'mesero'];
-      if (!allowedRoles.includes(user.role)) {
-          return alert("⛔ ACCESO DENEGADO.");
-      }
-
+      // PERMISOS ACTUALIZADOS: AHORA CUALQUIER USUARIO PUEDE ELIMINAR ITEMS
       if (!confirm(`¿Eliminar ${item.product_name} de la cuenta? Esto devolverá el inventario.`)) return;
       setLoading(true);
 
@@ -455,12 +450,11 @@ useEffect(() => {
                 <button onClick={() => setView('reportes')} className={`p-2 rounded ${view==='reportes'?'bg-yellow-600':'bg-gray-700'}`}><TrendingUp size={20}/></button>
                 </>
             )}
-            {/* CAJA/MESAS: Visible para todos los operativos excepto cocina */}
-            {(user.role !== 'cocina') && (
-                <button onClick={() => setView('caja')} className={`p-2 rounded flex items-center gap-2 ${view==='caja'?'bg-yellow-600':'bg-gray-700'}`}>
-                    <DollarSign size={20}/> <span className="text-xs hidden md:inline">CAJA / MESAS</span>
-                </button>
-            )}
+            {/* CAJA/MESAS: Visible para todos los operativos */}
+            <button onClick={() => setView('caja')} className={`p-2 rounded flex items-center gap-2 ${view==='caja'?'bg-yellow-600':'bg-gray-700'}`}>
+                <DollarSign size={20}/> <span className="text-xs hidden md:inline">CAJA / MESAS</span>
+            </button>
+            
             {/* NUEVO PEDIDO: Todos excepto cocina */}
             {user.role !== 'cocina' && (
                 <button onClick={() => setView('pedidos')} className={`p-2 rounded flex items-center gap-2 ${view==='pedidos'?'bg-yellow-600':'bg-gray-700'}`}>
@@ -717,8 +711,8 @@ useEffect(() => {
                              {(user.role === 'owner' || user.role === 'manager' || user.role === 'caja') && (
                                 <button onClick={() => setIsEditingOrder(false)} className={`flex-1 py-2 font-bold ${!isEditingOrder ? 'border-b-4 border-blue-600 text-blue-800' : 'text-gray-400'}`}>💳 COBRAR</button>
                              )}
-                             {/* TODOS (INCLUIDO MESERO) VEN EDITAR */}
-                             <button onClick={() => setIsEditingOrder(true)} className={`flex-1 py-2 font-bold ${isEditingOrder || user.role === 'mesero' ? 'border-b-4 border-yellow-500 text-yellow-800' : 'text-gray-400'}`}>✏️ EDITAR / AGREGAR</button>
+                             {/* TODOS (AHORA INCLUIDO COCINA) VEN EDITAR */}
+                             <button onClick={() => setIsEditingOrder(true)} className={`flex-1 py-2 font-bold ${isEditingOrder || (user.role !== 'owner' && user.role !== 'manager' && user.role !== 'caja') ? 'border-b-4 border-yellow-500 text-yellow-800' : 'text-gray-400'}`}>✏️ EDITAR / AGREGAR</button>
                         </div>
                         
                         {/* MODO COBRAR (SOLO PARA ROLES AUTORIZADOS) */}
@@ -751,7 +745,7 @@ useEffect(() => {
                                 <div className="border-t pt-4"><div className="flex justify-between font-bold text-lg mb-4"><span>Restante:</span>{(() => { const paid = currentPayments.reduce((s, p) => s + p.amount_usd, 0); const rest = selectedOrder.total_usd - paid; return ( <div className="text-right"><div className={rest > 0.01 ? 'text-red-600' : 'text-green-600'}>${Math.max(0, rest).toFixed(2)}</div></div> ) })()}</div><button onClick={handlePayment} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700">FINALIZAR VENTA</button></div>
                             </>
                         ) : (
-                        /* MODO EDICIÓN (DISPONIBLE PARA MESERO TAMBIEN) */
+                        /* MODO EDICIÓN (DISPONIBLE PARA TODOS) */
                             <>
                                 <div className="mb-4 bg-yellow-50 p-3 rounded text-sm text-yellow-800">
                                     Agrega o quita items. <br/> 
@@ -766,10 +760,8 @@ useEffect(() => {
                                                 <div className="font-bold text-sm">{item.product_name}</div>
                                                 <div className="text-xs text-gray-500">${item.price_at_time}</div>
                                             </div>
-                                            {/* BOTÓN DE ELIMINAR ITEM: AHORA DISPONIBLE PARA TODOS LOS OPERATIVOS */}
-                                            {(user.role === 'owner' || user.role === 'manager' || user.role === 'caja' || user.role === 'mesero') && (
-                                                <button onClick={() => handleRemoveItemFromOrder(item)} className="text-red-500 hover:bg-red-50 p-2 rounded" title="Eliminar Item"><XCircle size={20}/></button>
-                                            )}
+                                            {/* BOTÓN DE ELIMINAR ITEM: AHORA DISPONIBLE PARA TODOS */}
+                                            <button onClick={() => handleRemoveItemFromOrder(item)} className="text-red-500 hover:bg-red-50 p-2 rounded" title="Eliminar Item"><XCircle size={20}/></button>
                                         </div>
                                     ))}
                                 </div>
