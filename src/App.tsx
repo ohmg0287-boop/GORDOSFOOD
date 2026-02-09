@@ -726,7 +726,25 @@ useEffect(() => {
                             <>
                                 <div className="mb-6 bg-gray-50 p-4 rounded"><div className="flex justify-between text-lg mb-2"><span>Total:</span><span className="font-bold">${selectedOrder.total_usd.toFixed(2)}</span></div><div className="flex justify-between text-lg mb-2 text-blue-600"><span>Bolívares:</span><span className="font-bold">Bs {(selectedOrder.total_usd * tasa).toFixed(2)}</span></div></div>
                                 <div className="mb-6">
-                                    <div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option></select></div>
+                                    <div className="flex gap-2 mb-2">
+                                        <input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                                        
+                                        <select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+                                            <option value="usd_efectivo">$ Efectivo</option>
+                                            <option value="bs_efectivo">Bs Efectivo</option>
+                                            <option value="pago_movil">Pago Móvil</option>
+                                            <option value="punto">Punto</option>
+                                            <option value="zelle">Zelle</option>
+                                            
+                                            {/* --- AQUÍ ESTÁN LOS MÉTODOS DE PAGO NUEVOS (SOLO MANAGER/DUEÑO) --- */}
+                                            {(user.role === 'owner' || user.role === 'manager') && (
+                                                <>
+                                                    <option value="obsequio">🎁 OBSEQUIO / CORTESÍA</option>
+                                                    <option value="personal">👨‍🍳 CONSUMO PERSONAL</option>
+                                                </>
+                                            )}
+                                        </select>
+                                    </div>
                                     <button onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold">Agregar Pago</button>
                                 </div>
                                 <div className="space-y-2 mb-6">{currentPayments.map((p, i) => (<div key={i} className="flex justify-between border-b pb-1 text-sm"><span>{p.method}</span><span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span></div>))}</div>
