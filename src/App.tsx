@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText, Search, XCircle, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText, Search, XCircle, AlertTriangle, Database } from 'lucide-react';
 
 // --- CONEXIÓN ---
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-// --- MATRIZ DE RECETAS (Temporal: Idealmente migrar a BD) ---
-const RECIPES_MATRIX = {
+// --- MATRIZ DE RESPALDO PARA MIGRACIÓN (SOLO SE USARÁ UNA VEZ) ---
+const TEMP_OLD_RECIPES = {
   "Mamandini de Carne": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "tocineta": 1, "Jamon": 1, "queso chedar reb": 1, "Papel Envolver (Und)": 1 },
   "Mamandini de Pollo": { "Pan Batata hamb (Und)": 1, "Pollo 120g (Und)": 1, "tocineta": 1, "Jamon": 1, "queso chedar reb": 1, "Papel Envolver (Und)": 1 },
   "Mitad de Quincena Doble carne": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 2, "tocineta": 2, "Jamon": 2, "queso chedar reb": 2, "Papel Envolver (Und)": 1 },
@@ -43,7 +43,7 @@ export default function DondeManoloApp() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('login');
   const [loading, setLoading] = useState(false);
-  const [processing, setProcessing] = useState(false); // NUEVO: Para evitar doble click
+  const [processing, setProcessing] = useState(false);
   
   // FIX: Inicializar tasa desde localStorage para evitar "Infinity"
   const [tasa, setTasa] = useState(() => {
@@ -54,6 +54,7 @@ export default function DondeManoloApp() {
   // Datos
   const [products, setProducts] = useState([]);
   const [ingredients, setIngredients] = useState([]);
+  const [recipes, setRecipes] = useState({}); // NUEVO: Estado para recetas de BD
   const [orders, setOrders] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [staffList, setStaffList] = useState([]);
@@ -96,18 +97,38 @@ export default function DondeManoloApp() {
     const { data } = await supabase.from('settings').select('value').eq('key', 'tasa').maybeSingle();
     if (data && data.value.usd) {
         setTasa(data.value.usd);
-        localStorage.setItem('tasa_bcv', data.value.usd); // FIX: Guardar persistencia
+        localStorage.setItem('tasa_bcv', data.value.usd);
     }
   };
 
   const loadData = async () => {
     setLoading(true);
-    await fetchRate(); // Asegurar tasa actualizada
+    await fetchRate();
+    
+    // 1. Cargar tablas base
     const p = await supabase.from('products').select('*').order('name');
     const i = await supabase.from('ingredients').select('*').order('name');
     const o = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
     const e = await supabase.from('expenses').select('*').order('date', { ascending: false });
     
+    // 2. NUEVO: Cargar Recetas de Supabase
+    const r = await supabase.from('recipes').select('*');
+
+    // 3. Transformar recetas para acceso rápido: { "NombreProducto": [ {idIngrediente, cantidad}, ... ] }
+    const recipesMap = {};
+    if (r.data) {
+        r.data.forEach(row => {
+            if (!recipesMap[row.product_name]) {
+                recipesMap[row.product_name] = [];
+            }
+            recipesMap[row.product_name].push({
+                ingredientId: row.ingredient_id,
+                quantity: parseFloat(row.quantity)
+            });
+        });
+    }
+    setRecipes(recipesMap); // Guardamos en el estado
+
     if (user && user.role === 'owner') {
         const s = await supabase.from('staff').select('*').order('name');
         if (s.data) setStaffList(s.data);
@@ -129,6 +150,46 @@ export default function DondeManoloApp() {
     }
   };
 
+  // --- MIGRACION DE RECETAS (SOLO OWNER) ---
+  const handleMigrateRecipes = async () => {
+      if(!confirm("¿Estás seguro de migrar la matriz antigua a la base de datos? Esto debe hacerse UNA SOLA VEZ.")) return;
+      setLoading(true);
+      try {
+          const insertData = [];
+          
+          for (const [prodName, ings] of Object.entries(TEMP_OLD_RECIPES)) {
+              for (const [ingName, qty] of Object.entries(ings)) {
+                  // Buscar ID del ingrediente en la BD
+                  const foundIng = ingredients.find(i => i.name.trim().toLowerCase() === ingName.trim().toLowerCase());
+                  
+                  if (foundIng) {
+                      insertData.push({
+                          product_name: prodName,
+                          ingredient_id: foundIng.id,
+                          quantity: qty
+                      });
+                  } else {
+                      console.warn(`Ingrediente no encontrado para migración: ${ingName} en ${prodName}`);
+                  }
+              }
+          }
+          
+          if (insertData.length > 0) {
+              const { error } = await supabase.from('recipes').insert(insertData);
+              if (error) throw error;
+              alert(`¡Migración exitosa! Se insertaron ${insertData.length} registros.`);
+              loadData();
+          } else {
+              alert("No se encontraron datos para insertar o los nombres de ingredientes no coinciden.");
+          }
+
+      } catch (e) {
+          alert("Error en migración: " + e.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   // --- LOGIN ---
   const login = async (pin) => {
     const { data, error } = await supabase.from('staff').select('*').eq('pin', pin).maybeSingle();
@@ -137,7 +198,6 @@ export default function DondeManoloApp() {
       return;
     }
     setUser(data);
-    // Redirección basada en rol
     if (['owner', 'manager'].includes(data.role)) setView('dashboard');
     else if (data.role === 'caja') setView('caja');
     else if (data.role === 'mesero') setView('pedidos');
@@ -159,9 +219,8 @@ export default function DondeManoloApp() {
   };
 
   const sendOrder = async () => {
-    if (processing) return; // FIX: Evitar doble envío
+    if (processing) return;
     if (cart.length === 0 || !serviceInfo.val) return alert("Carrito vacío o falta Mesa/Cliente");
-    
     setProcessing(true);
     setLoading(true);
 
@@ -170,7 +229,6 @@ export default function DondeManoloApp() {
         const { data: order, error } = await supabase.from('orders').insert([{
           total_usd: total, service_type: serviceInfo.type, info: serviceInfo.val, created_by: user.name, status: 'pendiente'
         }]).select().single();
-
         if (error) throw error;
 
         const items = cart.map(i => ({
@@ -178,15 +236,17 @@ export default function DondeManoloApp() {
         }));
         await supabase.from('order_items').insert(items);
 
-        // Descontar Inventario
+        // --- LÓGICA DE INVENTARIO ACTUALIZADA (USA BD) ---
         for (let item of cart) {
-          const recipe = RECIPES_MATRIX[item.name];
-          if (recipe) {
-            for (let [ingName, qty] of Object.entries(recipe)) {
-                // FIX: Usar 'find' de manera segura
-                const dbIng = ingredients.find(i => i.name.trim().toLowerCase() === ingName.trim().toLowerCase());
+          const productRecipe = recipes[item.name]; 
+          
+          if (productRecipe) {
+            for (let ingItem of productRecipe) {
+                // Buscamos por ID, no por nombre (MUCHO MAS SEGURO)
+                const dbIng = ingredients.find(i => i.id === ingItem.ingredientId);
+                
                 if (dbIng) {
-                    const newStock = parseFloat(dbIng.stock) - qty;
+                    const newStock = parseFloat(dbIng.stock) - ingItem.quantity;
                     await supabase.from('ingredients').update({ stock: newStock }).eq('id', dbIng.id);
                 }
             }
@@ -207,7 +267,7 @@ export default function DondeManoloApp() {
 
   // --- MODIFICACIÓN DE ORDENES (EXISTENTES) ---
   const handleAddItemToOrder = async (product) => {
-      if (!selectedOrder || processing) return; // FIX: Bloqueo anti-doble click
+      if (!selectedOrder || processing) return;
       
       const confirmAdd = confirm(`¿Agregar ${product.name} a la Mesa ${selectedOrder.info}?`);
       if (!confirmAdd) return;
@@ -224,27 +284,27 @@ export default function DondeManoloApp() {
               price_at_time: product.price_usd,
               notes: 'ANEXO'
           }]);
-
+          
           // 2. Actualizar Total Orden
           const newTotal = selectedOrder.total_usd + product.price_usd;
           await supabase.from('orders').update({ 
               total_usd: newTotal,
               status: 'pendiente'
           }).eq('id', selectedOrder.id);
-
-          // 3. Descontar Inventario (Corrección de lógica de busqueda)
-          const recipe = RECIPES_MATRIX[product.name];
-          if (recipe) {
-              for (let [ingName, qty] of Object.entries(recipe)) {
-                  const dbIng = ingredients.find(i => i.name.trim().toLowerCase() === ingName.trim().toLowerCase());
+          
+          // 3. Descontar Inventario (Versión Supabase)
+          const productRecipe = recipes[product.name];
+          
+          if (productRecipe) {
+              for (let ingItem of productRecipe) {
+                  const dbIng = ingredients.find(i => i.id === ingItem.ingredientId);
                   if (dbIng) {
-                      await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - qty }).eq('id', dbIng.id);
+                      await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - ingItem.quantity }).eq('id', dbIng.id);
                   }
               }
           }
 
           alert("Item agregado exitosamente");
-          
           if(confirm("¿Imprimir Ticket de Anexo para Cocina?")) {
               setTicketType('anexo');
               setLastOrderTicket({
@@ -270,22 +330,23 @@ export default function DondeManoloApp() {
       
       setProcessing(true);
       setLoading(true);
-
       try {
         // 1. Borrar Item
         await supabase.from('order_items').delete().eq('id', item.id);
-
+        
         // 2. Actualizar Total
         const newTotal = Math.max(0, selectedOrder.total_usd - item.price_at_time);
         await supabase.from('orders').update({ total_usd: newTotal }).eq('id', selectedOrder.id);
 
-        // 3. Devolver Inventario
-        const recipe = RECIPES_MATRIX[item.product_name];
-        if (recipe) {
-            for (let [ingName, qty] of Object.entries(recipe)) {
-                const dbIng = ingredients.find(i => i.name.trim().toLowerCase() === ingName.trim().toLowerCase());
+        // 3. Devolver Inventario (Versión Supabase)
+        const productRecipe = recipes[item.product_name];
+        
+        if (productRecipe) {
+            for (let ingItem of productRecipe) {
+                const dbIng = ingredients.find(i => i.id === ingItem.ingredientId);
                 if (dbIng) {
-                    await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + qty }).eq('id', dbIng.id);
+                    // Sumamos en vez de restar
+                    await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + ingItem.quantity }).eq('id', dbIng.id);
                 }
             }
         }
@@ -299,7 +360,6 @@ export default function DondeManoloApp() {
   };
 
   // --- PAGOS ---
-  // FIX: Función para eliminar un pago mal ingresado
   const removePayment = (index) => {
       const newPayments = [...currentPayments];
       newPayments.splice(index, 1);
@@ -308,13 +368,10 @@ export default function DondeManoloApp() {
 
   const handlePayment = async () => {
     if (processing) return;
-    
     const totalPaid = currentPayments.reduce((s, p) => s + p.amount_usd, 0);
     const remaining = selectedOrder.total_usd - totalPaid;
     
-    // Margen de error pequeño por decimales
     if (remaining > 0.05) return alert("Falta cubrir el monto total");
-
     setProcessing(true);
     setLoading(true);
 
@@ -351,7 +408,6 @@ export default function DondeManoloApp() {
         const d = new Date(o.created_at);
         return d >= shiftStart && d < shiftEnd && o.status === 'pagado';
     });
-
     const shiftExpenses = expenses.filter(e => {
         const d = new Date(e.date);
         return d >= shiftStart && d < shiftEnd;
@@ -370,6 +426,7 @@ export default function DondeManoloApp() {
         acc[curr.method] = (acc[curr.method] || 0) + curr.amount_usd;
         return acc;
     }, {});
+
     const cashInUsd = breakdown['usd_efectivo'] || 0;
     const cashInBs = shiftPayments.filter(p => p.method === 'bs_efectivo').reduce((s, p) => s + p.amount_bs, 0);
 
@@ -403,7 +460,7 @@ export default function DondeManoloApp() {
         category: newExpense.isStock ? 'Compra Inventario' : newExpense.category,
         registered_by: user.name
     }]);
-
+    
     if (newExpense.isStock && newExpense.ingredientId && newExpense.quantity) {
         const ing = ingredients.find(i => i.id === newExpense.ingredientId);
         if (ing) {
@@ -544,6 +601,20 @@ export default function DondeManoloApp() {
                         <button onClick={async () => { await supabase.from('settings').upsert({ key:'tasa', value: { usd: tasa }}); localStorage.setItem('tasa_bcv', tasa); alert("Guardado"); }} className="bg-blue-600 text-white px-4 py-2 rounded font-bold"><Save size={20}/></button>
                     </div>
                 </div>
+
+                {/* BOTON DE MIGRACIÓN (SOLO OWNER) */}
+                {user.role === 'owner' && (
+                  <div className="bg-red-50 p-6 rounded-lg shadow-md border border-red-200 flex justify-between items-center">
+                      <div>
+                          <h3 className="font-bold text-red-900">Configuración Inicial</h3>
+                          <p className="text-sm text-red-800">Usar solo una vez para pasar las recetas del código a la Base de Datos.</p>
+                      </div>
+                      <button onClick={handleMigrateRecipes} disabled={loading} className="bg-red-600 text-white px-4 py-2 rounded font-bold flex gap-2 items-center hover:bg-red-700">
+                          <Database size={20}/> ?? MIGRAR RECETAS A BD
+                      </button>
+                  </div>
+                )}
+
                 <div className="bg-white p-6 rounded-lg shadow-md">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingDown className="text-red-500"/> Registrar Compra/Gasto</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded">
@@ -555,17 +626,17 @@ export default function DondeManoloApp() {
                              </select>
                         </div>
                         <div className="flex items-center gap-2 md:col-span-2 border-t pt-2 mt-2">
-                             <input type="checkbox" id="isStock" checked={newExpense.isStock} onChange={e => setNewExpense({...newExpense, isStock: e.target.checked})} className="w-5 h-5"/>
+                            <input type="checkbox" id="isStock" checked={newExpense.isStock} onChange={e => setNewExpense({...newExpense, isStock: e.target.checked})} className="w-5 h-5"/>
                             <label htmlFor="isStock" className="font-bold text-gray-700">¿Es Compra de Inventario? (Suma Stock)</label>
                         </div>
                         {newExpense.isStock && (
                             <div className="md:col-span-2 flex gap-2">
-                                 <select className="border p-2 rounded w-full" onChange={e => setNewExpense({...newExpense, ingredientId: e.target.value})}>
+                                <select className="border p-2 rounded w-full" onChange={e => setNewExpense({...newExpense, ingredientId: e.target.value})}>
                                     <option value="">Seleccione Insumo...</option>
                                     {ingredients.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                                 </select>
                                 <input type="number" placeholder="Cant" className="border p-2 rounded w-24" onChange={e => setNewExpense({...newExpense, quantity: e.target.value})} />
-                             </div>
+                            </div>
                         )}
                         <button onClick={registerExpenseTransaction} className="md:col-span-2 bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700">Registrar Salida</button>
                     </div>
@@ -574,10 +645,10 @@ export default function DondeManoloApp() {
                     <div className="bg-white p-6 rounded-lg shadow-md">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="font-bold text-lg flex items-center gap-2"><Users/> Gestión de Personal (Solo Dueño)</h3>
-                             <button onClick={() => handleStaff('add', { name: prompt("Nombre:"), role: prompt("Rol (owner, manager, caja, mesero, cocina):") })} className="bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1 text-sm"><PlusCircle size={16}/> Nuevo</button>
+                            <button onClick={() => handleStaff('add', { name: prompt("Nombre:"), role: prompt("Rol (owner, manager, caja, mesero, cocina):") })} className="bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1 text-sm"><PlusCircle size={16}/> Nuevo</button>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                             {staffList.map(s => (
+                            {staffList.map(s => (
                                 <div key={s.id} className="border p-3 rounded flex justify-between items-center bg-gray-50">
                                     <div><div className="font-bold">{s.name}</div><div className="text-xs text-gray-500 uppercase">{s.role}</div></div>
                                     <div className="flex gap-2">
@@ -602,7 +673,7 @@ export default function DondeManoloApp() {
                             <div>
                                 <h3 className="font-bold text-orange-900 text-lg">Cierre de Caja Operativo</h3>
                                 <p className="text-sm text-orange-800">Corta a las 6:00 AM del día siguiente. Genera PDF Carta.</p>
-                             </div>
+                            </div>
                             <button onClick={handleDailyClose} className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-bold shadow flex items-center gap-2">
                                 <FileText size={20}/> GENERAR REPORTE PDF
                             </button>
@@ -617,7 +688,7 @@ export default function DondeManoloApp() {
                     </div>
                 </div>
                 <div className="bg-white p-8 rounded shadow-lg" id="reporte-imprimible">
-                     <div className="text-center mb-6 border-b pb-4">
+                    <div className="text-center mb-6 border-b pb-4">
                         <h1 className="text-2xl font-bold">REPORTE (VISTA PREVIA)</h1>
                         <p className="text-gray-500 capitalize">Filtro: {reportFilter}</p>
                     </div>
@@ -630,7 +701,7 @@ export default function DondeManoloApp() {
                                     <div className="font-bold text-lg">${amount.toFixed(2)}</div>
                                 </div>
                             ))}
-                         </div>
+                        </div>
                     </div>
                     <div>
                         <h3 className="font-bold border-b mb-2">Gastos</h3>
@@ -640,10 +711,10 @@ export default function DondeManoloApp() {
                                      <tr key={e.id}>
                                          <td>{e.description}</td>
                                          <td className="text-right text-red-600">-${e.amount.toFixed(2)}</td>
-                                      </tr>
+                                     </tr>
                                  ))}
                              </tbody>
-                         </table>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -660,7 +731,7 @@ export default function DondeManoloApp() {
                     </div>
                 </div>
                 <div className="overflow-x-auto">
-                     <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse">
                         <thead><tr className="bg-gray-100 border-b"><th className="p-3">Ingrediente</th><th className="p-3">Stock</th><th className="p-3">Unidad</th>{user.role === 'owner' && <th className="p-3 no-print">Ajuste</th>}</tr></thead>
                         <tbody>
                             {ingredients.map(ing => (
@@ -671,11 +742,11 @@ export default function DondeManoloApp() {
                                     {user.role === 'owner' && (
                                         <td className="p-3 no-print"><button onClick={async () => { const val = prompt(`Nuevo stock para ${ing.name}:`, ing.stock); if(val) { await supabase.from('ingredients').update({stock: val}).eq('id', ing.id); loadData(); }}} className="text-blue-600 hover:text-blue-800"><Edit3 size={18}/></button></td>
                                     )}
-                                 </tr>
+                                </tr>
                             ))}
                         </tbody>
                     </table>
-                 </div>
+                </div>
             </div>
         )}
 
@@ -683,7 +754,7 @@ export default function DondeManoloApp() {
         {view === 'pedidos' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[80vh]">
                 <div className="md:col-span-2 overflow-y-auto bg-white p-4 rounded shadow-lg">
-                     <h2 className="font-bold text-xl mb-4">Menú (Nuevo Pedido)</h2>
+                    <h2 className="font-bold text-xl mb-4">Menú (Nuevo Pedido)</h2>
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                         {products.map(p => (
                             <div key={p.id} onClick={() => addToCart(p)} className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition transform hover:scale-105">
@@ -713,17 +784,17 @@ export default function DondeManoloApp() {
                                         className="text-xs border-b w-full mt-1 focus:outline-none bg-transparent" 
                                         value={item.notes || ''}
                                         onChange={e => updateCartNote(item.tempId, e.target.value)}
-                                     />
+                                      />
                                 </div>
                                 <button onClick={() => removeFromCart(item.tempId)} className="text-red-500 hover:text-red-700 p-2">
-                                     <Trash2 size={18}/>
+                                    <Trash2 size={18}/>
                                 </button>
                             </div>
-                        ))}
+                         ))}
                     </div>
                     <div className="mt-4 pt-4 border-t">
                         <div className="flex justify-between text-xl font-bold mb-4"><span>Total:</span><span>${cart.reduce((s, i) => s + i.price_usd, 0).toFixed(2)}</span></div>
-                         <button onClick={sendOrder} disabled={loading || processing} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 disabled:opacity-50">{processing ? 'PROCESANDO...' : (loading ? '...' : 'ENVIAR A COCINA')}</button>
+                        <button onClick={sendOrder} disabled={loading || processing} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 disabled:opacity-50">{processing ? 'PROCESANDO...' : (loading ? '...' : 'ENVIAR A COCINA')}</button>
                     </div>
                 </div>
             </div>
@@ -731,7 +802,7 @@ export default function DondeManoloApp() {
 
         {/* --- COCINA --- */}
         {view === 'cocina' && (
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {orders.filter(o => o.status === 'pendiente').map(o => (
                     <div key={o.id} className="bg-white rounded-lg shadow-md overflow-hidden border-l-8 border-yellow-500">
                         <div className="bg-yellow-50 p-3 border-b border-yellow-100 flex justify-between items-center"><span className="font-bold text-lg text-gray-800">{o.service_type}</span><span className="text-sm font-bold bg-white px-2 rounded border">{o.info}</span></div>
@@ -755,7 +826,7 @@ export default function DondeManoloApp() {
                     ))}
                 </div>
                 
-                 {selectedOrder && (
+                {selectedOrder && (
                     <div className="bg-white p-6 rounded shadow-lg h-fit sticky top-20">
                         <div className="flex justify-between border-b pb-2 mb-4">
                              {(user.role === 'owner' || user.role === 'manager' || user.role === 'caja') && (
@@ -805,7 +876,7 @@ export default function DondeManoloApp() {
                                 </div>
                             </>
                         ) : (
-                            <>
+                             <>
                                 <div className="mb-4 bg-yellow-50 p-3 rounded text-sm text-yellow-800">
                                     Agrega o quita items.
                                     <br/> 
@@ -837,7 +908,7 @@ export default function DondeManoloApp() {
                                                 <div className="text-green-600">${p.price_usd}</div>
                                             </button>
                                         ))}
-                                     </div>
+                                    </div>
                                 </div>
                             </>
                         )}
@@ -924,20 +995,20 @@ export default function DondeManoloApp() {
                 <div className="border rounded p-4 bg-gray-50">
                      <h3 className="font-bold text-lg mb-4 border-b border-gray-300 pb-2">DESGLOSE DE MÉTODOS</h3>
                      <table className="w-full">
-                        <tbody>
+                         <tbody>
                             {Object.entries(closingData.breakdown).map(([method, amount]) => (
                                 <tr key={method} className="border-b border-gray-200">
                                     <td className="py-1 capitalize">{method.replace('_', ' ')}</td>
                                     <td className="py-1 text-right font-bold">${amount.toFixed(2)}</td>
                                 </tr>
-                            ))}
+                             ))}
                          </tbody>
                      </table>
                 </div>
             </div>
 
             <div className="mb-8 border rounded p-4">
-                <h3 className="font-bold text-lg mb-4">ARQUEO DE CAJA FÍSICA (Dinero en Gaveta)</h3>
+                 <h3 className="font-bold text-lg mb-4">ARQUEO DE CAJA FÍSICA (Dinero en Gaveta)</h3>
                  <div className="flex justify-around text-center">
                     <div className="p-4 bg-green-50 rounded border w-1/3">
                         <div className="text-gray-500 text-sm">EFECTIVO USD</div>
