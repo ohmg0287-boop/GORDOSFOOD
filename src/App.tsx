@@ -1,43 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText, Search, XCircle, AlertTriangle, Database, BookOpen } from 'lucide-react';
+import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText, Search, XCircle, AlertTriangle, Database, BookOpen, Lock, Unlock, Calendar, Eye } from 'lucide-react';
 
 // --- CONEXIÓN ---
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
-
-// --- MATRIZ DE RESPALDO (MANTENIDA SOLO POR SEGURIDAD PARA MIGRACIÓN) ---
-const TEMP_OLD_RECIPES = {
-  "Mamandini de Carne": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "tocineta": 1, "Jamon": 1, "queso chedar reb": 1, "Papel Envolver (Und)": 1 },
-  "Mamandini de Pollo": { "Pan Batata hamb (Und)": 1, "Pollo 120g (Und)": 1, "tocineta": 1, "Jamon": 1, "queso chedar reb": 1, "Papel Envolver (Und)": 1 },
-  "Mitad de Quincena Doble carne": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 2, "tocineta": 2, "Jamon": 2, "queso chedar reb": 2, "Papel Envolver (Und)": 1 },
-  "Mitad de Quincena Doble Pollo": { "Pan Batata hamb (Und)": 1, "Pollo 120g (Und)": 2, "tocineta": 2, "Jamon": 2, "queso chedar reb": 2, "Papel Envolver (Und)": 1 },
-  "Mitad de Quincena Carne y Pollo": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "Pollo 120g (Und)": 1, "tocineta": 2, "Jamon": 2, "queso chedar reb": 2, "Papel Envolver (Und)": 1 },
-  "Viaje a Roma": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "tocineta": 1, "Jamon": 1, "queso chedar reb": 1, "Papel Envolver (Und)": 1 },
-  "La Buchona": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "Chuleta 120g (Und)": 1, "tocineta": 1, "Jamon": 1, "queso chedar reb": 1, "Papel Envolver (Und)": 1 },
-  "Big Manolo": { "Pan Gigante (Und)": 1, "Carne 120g (Und)": 7, "Pollo 120g (Und)": 7, "Chuleta 120g (Und)": 7, "tocineta": 4, "Jamon": 4, "queso chedar reb": 4, "Papel Envolver (Und)": 2 },
-  "La Callejera": { "Pan Batata hamb (Und)": 1, "Carne 120g (Und)": 1, "Chorizo de ajo": 1, "tocineta": 1, "Jamon": 1, "queso chedar reb": 1, "Papel Envolver (Und)": 1 },
-  "Salva Patria": { "Pan Batata perro (Und)": 1, "salchicha figos": 1, "queso chedar br": 1, "Papel Envolver (Und)": 1 },
-  "El Resuelve": { "Pan Batata perro (Und)": 1, "Salchicha Ahumada": 1, "queso chedar br": 1, "Papel Envolver (Und)": 1 },
-  "El Sifrino": { "Pan Batata perro (Und)": 1, "Salchicha Ahumada": 1, "tocineta": 1, "queso chedar reb": 1, "Bandeja Anime (Und)": 1 },
-  "Pepito Mitad Quincena": { "Pan pepito (Und)": 1, "Porciones pep 150": 1, "tocineta": 1, "queso chedar br": 1, "Papel Envolver (Und)": 1 },
-  "Pepito Hoy Cobre": { "Pan pepito (Und)": 1, "Porciones pep 250": 1, "tocineta": 1, "queso chedar br": 1, "Papel Envolver (Und)": 1 },
-  "El antojito (6und)": { "tequeños racion": 0.5, "Bandeja Anime (Und)": 1 },
-  "El antojito (8und)": { "tequeños racion": 0.7, "Bandeja Anime (Und)": 1 },
-  "El antojito (14und)": { "tequeños racion": 1, "Bandeja Anime (Und)": 1 },
-  "La Acompañante": { "Papas (Porción 150g)": 1, "Bandeja Anime (Und)": 1 },
-  "Nestea Pequeño": { "Vaso Plástico p (Und)": 1 },
-  "Nestea Grande": { "Vaso Plástico g (Und)": 1, "Nestea Grande": 1 },
-  "Agua Personal": { "Agua Personal": 1 },
-  "Refresco 1 Litros": { "refresco 1l": 1 },
-  "Refresco 1.5 Litros": { "Refresco 1.5L (Bot)": 1 },
-  "Propina bien Gastada": {},
-  "Cuota feliz (4und)": { "tequeños racion": 0.5, "Bandeja Anime (Und)": 1 },
-  "Cuota feliz (6und)": { "tequeños racion": 0.7, "Bandeja Anime (Und)": 1 },
-  "Cuota feliz (12und)": { "tequeños racion": 1, "Bandeja Anime (Und)": 1 },
-  "Gustazo del mes": {},
-  "Capricho de quincena": {},
-  "Malta lata": {}
-};
 
 export default function DondeManoloApp() {
   const [user, setUser] = useState(null);
@@ -45,22 +11,25 @@ export default function DondeManoloApp() {
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   
-  // Inicializar tasa
+  // --- ESTADO DE SESIÓN (TURNO) ---
+  const [currentSession, setCurrentSession] = useState(null); 
+  const [sessionHistory, setSessionHistory] = useState([]); // Nuevo: Historial
+
   const [tasa, setTasa] = useState(() => {
     const saved = localStorage.getItem('tasa_bcv');
     return saved ? parseFloat(saved) : 0;
   });
 
-  // Datos
+  // Datos Generales
   const [products, setProducts] = useState([]);
   const [ingredients, setIngredients] = useState([]);
-  const [recipes, setRecipes] = useState({}); // RECETAS DE BD
-  const [orders, setOrders] = useState([]);
-  const [expenses, setExpenses] = useState([]);
+  const [recipes, setRecipes] = useState({}); 
+  const [orders, setOrders] = useState([]); 
+  const [expenses, setExpenses] = useState([]); 
   const [staffList, setStaffList] = useState([]);
 
-  // Estados para el Editor de Recetas (NUEVO)
-  const [invSubView, setInvSubView] = useState('insumos'); // 'insumos' o 'recetas'
+  // Editor de Recetas
+  const [invSubView, setInvSubView] = useState('insumos');
   const [selectedProductRecipe, setSelectedProductRecipe] = useState('');
   const [newRecipeEntry, setNewRecipeEntry] = useState({ ingredientId: '', quantity: '' });
 
@@ -72,7 +41,7 @@ export default function DondeManoloApp() {
   const [ticketType, setTicketType] = useState('full'); 
   const [closingData, setClosingData] = useState(null);
 
-  // Caja y Modificaciones
+  // Caja
   const [payAmount, setPayAmount] = useState('');
   const [payMethod, setPayMethod] = useState('usd_efectivo');
   const [currentPayments, setCurrentPayments] = useState([]);
@@ -82,25 +51,26 @@ export default function DondeManoloApp() {
   // Gastos
   const [newExpense, setNewExpense] = useState({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' });
 
-  // Reportes
-  const [reportFilter, setReportFilter] = useState('today'); 
-  const [paymentBreakdown, setPaymentBreakdown] = useState({});
-
   // Auto-refresco
   useEffect(() => {
     if (user) {
       loadData();
       if (['cocina', 'caja', 'owner', 'manager', 'mesero'].includes(user.role)) {
-        const i = setInterval(fetchOrders, 5000);
+        const i = setInterval(fetchOrders, 5000); 
         return () => clearInterval(i);
       }
     }
   }, [user]);
 
+  // Cargar Historial al entrar a Reportes
+  useEffect(() => {
+      if (view === 'reportes') loadHistory();
+  }, [view]);
+
   // --- CARGA DE DATOS ---
   const fetchRate = async () => {
     const { data } = await supabase.from('settings').select('value').eq('key', 'tasa').maybeSingle();
-    if (data && data.value.usd) {
+    if (data?.value?.usd) {
         setTasa(data.value.usd);
         localStorage.setItem('tasa_bcv', data.value.usd);
     }
@@ -110,25 +80,34 @@ export default function DondeManoloApp() {
     setLoading(true);
     await fetchRate();
     
+    // 1. SESIÓN ACTIVA
+    const { data: sessionData } = await supabase.from('cash_sessions').select('*').eq('status', 'open').maybeSingle();
+    setCurrentSession(sessionData || null);
+
+    // 2. Tablas Base
     const p = await supabase.from('products').select('*').order('name');
     const i = await supabase.from('ingredients').select('*').order('name');
-    const o = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
-    const e = await supabase.from('expenses').select('*').order('date', { ascending: false });
     
-    // CARGAR RECETAS DE BD
+    // 3. Recetas
     const r = await supabase.from('recipes').select('*');
     const recipesMap = {};
     if (r.data) {
         r.data.forEach(row => {
             if (!recipesMap[row.product_name]) recipesMap[row.product_name] = [];
-            recipesMap[row.product_name].push({
-                id: row.id,
-                ingredientId: row.ingredient_id,
-                quantity: parseFloat(row.quantity)
-            });
+            recipesMap[row.product_name].push({ id: row.id, ingredientId: row.ingredient_id, quantity: parseFloat(row.quantity) });
         });
     }
     setRecipes(recipesMap);
+
+    // 4. Datos de Sesión Actual
+    if (sessionData) {
+        const o = await supabase.from('orders').select('*, order_items(*), payments(*)').eq('session_id', sessionData.id).order('created_at', { ascending: false });
+        const e = await supabase.from('expenses').select('*').eq('session_id', sessionData.id).order('date', { ascending: false });
+        if (o.data) setOrders(o.data);
+        if (e.data) setExpenses(e.data);
+    } else {
+        setOrders([]); setExpenses([]);
+    }
 
     if (user && user.role === 'owner') {
         const s = await supabase.from('staff').select('*').order('name');
@@ -137,13 +116,18 @@ export default function DondeManoloApp() {
     
     if (p.data) setProducts(p.data);
     if (i.data) setIngredients(i.data);
-    if (o.data) setOrders(o.data);
-    if (e.data) setExpenses(e.data);
     setLoading(false);
   };
 
+  const loadHistory = async () => {
+      // Cargar ultimos 20 cierres
+      const { data } = await supabase.from('cash_sessions').select('*').eq('status', 'closed').order('closed_at', { ascending: false }).limit(20);
+      if (data) setSessionHistory(data);
+  };
+
   const fetchOrders = async () => {
-    const { data } = await supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
+    if (!currentSession) return;
+    const { data } = await supabase.from('orders').select('*, order_items(*), payments(*)').eq('session_id', currentSession.id).order('created_at', { ascending: false });
     if (data) setOrders(data);
     if (selectedOrder) {
         const updated = data?.find(o => o.id === selectedOrder.id);
@@ -151,262 +135,174 @@ export default function DondeManoloApp() {
     }
   };
 
-  // --- GESTIÓN DE RECETAS (NUEVAS FUNCIONES) ---
-  const handleAddIngredientToRecipe = async () => {
-      if (!selectedProductRecipe || !newRecipeEntry.ingredientId || !newRecipeEntry.quantity) return alert("Faltan campos");
+  // --- GESTIÓN DE SESIÓN ---
+  const handleOpenSession = async () => {
+      const base = prompt("Ingrese Monto Base en Caja ($ Efectivo):", "0");
+      if (base === null) return;
       setLoading(true);
-      const { error } = await supabase.from('recipes').insert([{
-          product_name: selectedProductRecipe,
-          ingredient_id: newRecipeEntry.ingredientId,
-          quantity: parseFloat(newRecipeEntry.quantity)
-      }]);
-      if (error) alert("Error: " + error.message);
-      else {
-          setNewRecipeEntry({ ingredientId: '', quantity: '' });
-          loadData();
+      const { error } = await supabase.from('cash_sessions').insert([{ opened_by: user.name, base_amount: parseFloat(base), status: 'open' }]);
+      if (error) alert("Error: " + error.message); else { alert("¡Caja Abierta!"); loadData(); }
+      setLoading(false);
+  };
+
+  // Generar Reporte (Para cierre o para historial)
+  const generateReportData = async (session, isHistorical = false) => {
+      setLoading(true);
+      let sessionOrders = [];
+      let sessionExpenses = [];
+
+      if (isHistorical) {
+          // Buscar datos antiguos
+          const o = await supabase.from('orders').select('*, order_items(*), payments(*)').eq('session_id', session.id);
+          const e = await supabase.from('expenses').select('*').eq('session_id', session.id);
+          sessionOrders = o.data || [];
+          sessionExpenses = e.data || [];
+      } else {
+          // Usar estado actual
+          sessionOrders = orders;
+          sessionExpenses = expenses;
       }
-      setLoading(false);
-  };
 
-  const handleRemoveRecipeItem = async (id) => {
-      if (!confirm("¿Eliminar este ingrediente de la receta?")) return;
-      setLoading(true);
-      await supabase.from('recipes').delete().eq('id', id);
-      loadData();
-      setLoading(false);
-  };
+      const totalSales = sessionOrders.filter(o => o.status === 'pagado').reduce((sum, o) => sum + o.total_usd, 0);
+      let allPayments = [];
+      sessionOrders.forEach(o => { if (o.payments) allPayments = [...allPayments, ...o.payments]; });
 
-  const handleMigrateRecipes = async () => {
-      if(!confirm("¿Migrar matriz antigua a la base de datos?")) return;
-      setLoading(true);
-      try {
-          const insertData = [];
-          for (const [prodName, ings] of Object.entries(TEMP_OLD_RECIPES)) {
-              for (const [ingName, qty] of Object.entries(ings)) {
-                  const foundIng = ingredients.find(i => i.name.trim().toLowerCase() === ingName.trim().toLowerCase());
-                  if (foundIng) insertData.push({ product_name: prodName, ingredient_id: foundIng.id, quantity: qty });
-              }
+      const breakdown = allPayments.reduce((acc, curr) => {
+          acc[curr.method] = (acc[curr.method] || 0) + curr.amount_usd;
+          return acc;
+      }, {});
+
+      const expensesTotal = sessionExpenses.reduce((sum, e) => sum + e.amount, 0);
+      // CashInUsd = Base + VentasEfectivo - Gastos (Si así se define)
+      const cashInUsd = (breakdown['usd_efectivo'] || 0) + parseFloat(session.base_amount);
+      const cashInBs = allPayments.filter(p => p.method === 'bs_efectivo').reduce((s, p) => s + p.amount_bs, 0);
+
+      const productCount = {};
+      sessionOrders.filter(o => o.status === 'pagado').forEach(o => {
+          o.order_items.forEach(item => { productCount[item.product_name] = (productCount[item.product_name] || 0) + item.quantity; });
+      });
+
+      const inventoryUsage = {};
+      for (const [prodName, qty] of Object.entries(productCount)) {
+          const recipe = recipes[prodName];
+          if (recipe) {
+              recipe.forEach(rItem => {
+                  const ing = ingredients.find(i => i.id === rItem.ingredientId);
+                  if (ing) inventoryUsage[ing.name] = (inventoryUsage[ing.name] || 0) + (rItem.quantity * qty);
+              });
           }
-          if (insertData.length > 0) {
-              const { error } = await supabase.from('recipes').insert(insertData);
-              if (error) throw error;
-              alert("Migración exitosa.");
-              loadData();
-          }
-      } catch (e) { alert("Error: " + e.message); }
-      finally { setLoading(false); }
+      }
+
+      const report = {
+          id: session.id,
+          opened_at: new Date(session.opened_at).toLocaleString(),
+          closed_at: session.closed_at ? new Date(session.closed_at).toLocaleString() : 'EN CURSO',
+          opened_by: session.opened_by,
+          closed_by: session.closed_by || 'N/A',
+          base: session.base_amount,
+          sales: totalSales,
+          expenses: expensesTotal,
+          net: totalSales - expensesTotal,
+          breakdown, cashInUsd, cashInBs, productCount, inventoryUsage, allPayments
+      };
+      
+      setClosingData(report);
+      setLoading(false);
+      setTimeout(() => window.print(), 500);
   };
 
-  // --- LOGIN ---
-  const login = async (pin) => {
-    const { data, error } = await supabase.from('staff').select('*').eq('pin', pin).maybeSingle();
-    if (error || !data) { alert("PIN Incorrecto"); return; }
-    setUser(data);
-    if (['owner', 'manager'].includes(data.role)) setView('dashboard');
-    else if (data.role === 'caja') setView('caja');
-    else if (data.role === 'mesero') setView('pedidos');
-    else if (data.role === 'cocina') setView('cocina');
+  const handleCloseSession = async () => {
+      if (!confirm("¿CERRAR LA CAJA Y GENERAR REPORTE FINAL?")) return;
+      await generateReportData(currentSession, false); // Generar reporte primero
+      
+      await supabase.from('cash_sessions').update({ status: 'closed', closed_at: new Date(), closed_by: user.name }).eq('id', currentSession.id);
+      setCurrentSession(null);
   };
 
-  // --- CARRITO ---
-  const addToCart = (product) => setCart(prev => [...prev, { ...product, tempId: Date.now() + Math.random() }]);
-  const removeFromCart = (tempId) => setCart(prev => prev.filter(item => item.tempId !== tempId));
-  const updateCartNote = (tempId, note) => setCart(prev => prev.map(item => item.tempId === tempId ? { ...item, notes: note } : item));
-
+  // --- LOGICA NEGOCIO ---
   const sendOrder = async () => {
-    if (processing || cart.length === 0 || !serviceInfo.val) return alert("Carrito vacío o falta Mesa");
+    if (!currentSession) return alert("?? CAJA CERRADA");
+    if (processing || cart.length === 0 || !serviceInfo.val) return alert("Falta info");
     setProcessing(true); setLoading(true);
     try {
         const total = cart.reduce((sum, item) => sum + item.price_usd, 0);
-        const { data: order, error } = await supabase.from('orders').insert([{
-          total_usd: total, service_type: serviceInfo.type, info: serviceInfo.val, created_by: user.name, status: 'pendiente'
-        }]).select().single();
+        const { data: order, error } = await supabase.from('orders').insert([{ total_usd: total, service_type: serviceInfo.type, info: serviceInfo.val, created_by: user.name, status: 'pendiente', session_id: currentSession.id }]).select().single();
         if (error) throw error;
-
         const items = cart.map(i => ({ order_id: order.id, product_name: i.name, quantity: 1, price_at_time: i.price_usd, notes: i.notes || '' }));
         await supabase.from('order_items').insert(items);
-
-        // DESCUENTO INVENTARIO (USANDO BD)
         for (let item of cart) {
           const productRecipe = recipes[item.name]; 
-          if (productRecipe) {
-            for (let ingItem of productRecipe) {
-                const dbIng = ingredients.find(i => i.id === ingItem.ingredientId);
-                if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - ingItem.quantity }).eq('id', dbIng.id);
-            }
-          }
+          if (productRecipe) { for (let ingItem of productRecipe) { const dbIng = ingredients.find(i => i.id === ingItem.ingredientId); if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - ingItem.quantity }).eq('id', dbIng.id); } }
         }
         setTicketType('full'); setLastOrderTicket({ ...order, items: items }); setCart([]); setServiceInfo({ type: 'Mesa', val: '' }); loadData();
-    } catch (e) { alert("Error: " + e.message); }
-    finally { setProcessing(false); setLoading(false); }
+    } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
 
-  // --- MODIFICACIONES ORDEN ---
-  const handleAddItemToOrder = async (product) => {
-      if (!selectedOrder || processing) return;
-      if (!confirm(`¿Agregar ${product.name}?`)) return;
-      setProcessing(true); setLoading(true);
-      try {
-          await supabase.from('order_items').insert([{ order_id: selectedOrder.id, product_name: product.name, quantity: 1, price_at_time: product.price_usd, notes: 'ANEXO' }]);
-          const newTotal = selectedOrder.total_usd + product.price_usd;
-          await supabase.from('orders').update({ total_usd: newTotal, status: 'pendiente' }).eq('id', selectedOrder.id);
-          
-          // DESCUENTO (BD)
-          const productRecipe = recipes[product.name];
-          if (productRecipe) {
-              for (let ingItem of productRecipe) {
-                  const dbIng = ingredients.find(i => i.id === ingItem.ingredientId);
-                  if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - ingItem.quantity }).eq('id', dbIng.id);
-              }
-          }
-          alert("Agregado"); 
-          if(confirm("¿Imprimir Ticket de Anexo?")) {
-              setTicketType('anexo');
-              setLastOrderTicket({ ...selectedOrder, items: [{ product_name: product.name, quantity: 1, notes: 'ANEXO / AGREGADO' }] });
-              setTimeout(() => window.print(), 500);
-          }
-          setItemSearch(''); fetchOrders();
-      } catch (e) { alert("Error: " + e.message); }
-      finally { setProcessing(false); setLoading(false); }
-  };
-
-  const handleRemoveItemFromOrder = async (item) => {
-      if (processing || !confirm(`¿Eliminar ${item.product_name}?`)) return;
-      setProcessing(true); setLoading(true);
-      try {
-        await supabase.from('order_items').delete().eq('id', item.id);
-        const newTotal = Math.max(0, selectedOrder.total_usd - item.price_at_time);
-        await supabase.from('orders').update({ total_usd: newTotal }).eq('id', selectedOrder.id);
-        
-        // DEVOLUCION (BD)
-        const productRecipe = recipes[item.product_name];
-        if (productRecipe) {
-            for (let ingItem of productRecipe) {
-                const dbIng = ingredients.find(i => i.id === ingItem.ingredientId);
-                if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + ingItem.quantity }).eq('id', dbIng.id);
-            }
-        }
-        fetchOrders();
-      } catch (e) { alert("Error: " + e.message); }
-      finally { setProcessing(false); setLoading(false); }
-  };
-
-  // --- PAGOS ---
   const handlePayment = async () => {
+    if (!currentSession) return alert("Caja Cerrada");
     if (processing) return;
     const totalPaid = currentPayments.reduce((s, p) => s + p.amount_usd, 0);
-    if (selectedOrder.total_usd - totalPaid > 0.05) return alert("Falta cubrir monto");
+    if (selectedOrder.total_usd - totalPaid > 0.05) return alert("Falta monto");
     setProcessing(true); setLoading(true);
     try {
-        const paymentsToSave = currentPayments.map(p => ({ order_id: selectedOrder.id, method: p.method, amount_usd: p.amount_usd, amount_bs: p.amount_bs, rate_used: tasa }));
+        const paymentsToSave = currentPayments.map(p => ({ order_id: selectedOrder.id, method: p.method, amount_usd: p.amount_usd, amount_bs: p.amount_bs, rate_used: tasa, cashier: user.name }));
         await supabase.from('payments').insert(paymentsToSave);
         await supabase.from('orders').update({ status: 'pagado' }).eq('id', selectedOrder.id);
         alert("Cobrado ??"); setSelectedOrder(null); setCurrentPayments([]); fetchOrders();
-    } catch (e) { alert("Error: " + e.message); }
-    finally { setProcessing(false); setLoading(false); }
+    } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
 
-  // --- CIERRE ---
-  const handleDailyClose = async () => {
-    setLoading(true);
-    const now = new Date();
-    const shiftStart = new Date(now);
-    // Lógica: Si son las 3 AM, el turno empezó ayer a las 6 AM.
-    if (now.getHours() < 6) shiftStart.setDate(shiftStart.getDate() - 1);
-    shiftStart.setHours(6, 0, 0, 0); 
-    const shiftEnd = new Date(shiftStart);
-    shiftEnd.setDate(shiftEnd.getDate() + 1);
-
-    const shiftOrders = orders.filter(o => { const d = new Date(o.created_at); return d >= shiftStart && d < shiftEnd && o.status === 'pagado'; });
-    const shiftExpenses = expenses.filter(e => { const d = new Date(e.date); return d >= shiftStart && d < shiftEnd; });
-    
-    const orderIds = shiftOrders.map(o => o.id);
-    let shiftPayments = [];
-    if (orderIds.length > 0) { const { data } = await supabase.from('payments').select('*').in('order_id', orderIds); if (data) shiftPayments = data; }
-
-    const totalSales = shiftOrders.reduce((sum, o) => sum + o.total_usd, 0);
-    const totalExpenses = shiftExpenses.reduce((sum, e) => sum + e.amount, 0);
-    const breakdown = shiftPayments.reduce((acc, curr) => { acc[curr.method] = (acc[curr.method] || 0) + curr.amount_usd; return acc; }, {});
-    const cashInUsd = breakdown['usd_efectivo'] || 0;
-    const cashInBs = shiftPayments.filter(p => p.method === 'bs_efectivo').reduce((s, p) => s + p.amount_bs, 0);
-
-    setClosingData({ dateStr: shiftStart.toLocaleDateString(), printDate: now.toLocaleString(), sales: totalSales, expenses: totalExpenses, net: totalSales - totalExpenses, breakdown, cashInUsd, cashInBs, expensesList: shiftExpenses, orderCount: shiftOrders.length });
-    setLastOrderTicket(null); setLoading(false);
-    setTimeout(() => window.print(), 500);
-  };
-
-  // --- GASTOS Y STAFF ---
   const registerExpenseTransaction = async () => {
+    if (!currentSession) return alert("Caja Cerrada");
     if (!newExpense.desc || !newExpense.amount) return alert("Faltan datos");
     setLoading(true);
-    await supabase.from('expenses').insert([{ description: newExpense.desc, amount: parseFloat(newExpense.amount), category: newExpense.isStock ? 'Compra Inventario' : newExpense.category, registered_by: user.name }]);
+    await supabase.from('expenses').insert([{ description: newExpense.desc, amount: parseFloat(newExpense.amount), category: newExpense.isStock ? 'Compra Inventario' : newExpense.category, registered_by: user.name, session_id: currentSession.id }]);
     if (newExpense.isStock && newExpense.ingredientId && newExpense.quantity) {
         const ing = ingredients.find(i => i.id === newExpense.ingredientId);
         if (ing) await supabase.from('ingredients').update({ stock: parseFloat(ing.stock) + parseFloat(newExpense.quantity) }).eq('id', ing.id);
     }
-    setNewExpense({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' });
-    loadData(); setLoading(false);
+    setNewExpense({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' }); loadData(); setLoading(false);
   };
 
-  const handleStaff = async (action, staffData) => {
-    if (user.role !== 'owner') return alert("Acceso denegado");
-    if (action === 'add') {
-        const pin = prompt("Asignar PIN:");
-        if (!pin) return;
-        await supabase.from('staff').insert([{ name: staffData.name, role: staffData.role, pin }]);
-    } else if (action === 'updatePin') {
-        const newPin = prompt("Nuevo PIN:");
-        if (newPin) await supabase.from('staff').update({ pin: newPin }).eq('id', staffData.id);
-    } else if (action === 'delete') {
-        if(confirm("¿Eliminar empleado?")) await supabase.from('staff').delete().eq('id', staffData.id);
-    }
-    loadData();
+  // --- OTRAS FUNCIONES ---
+  const handleAddIngredient = async () => { const n = prompt("Nombre:"); if(n) { const u = prompt("Unidad:"); await supabase.from('ingredients').insert([{ name:n, unit:u, stock: 0 }]); loadData(); }};
+  const handleAddIngredientToRecipe = async () => { if (!selectedProductRecipe || !newRecipeEntry.ingredientId) return; setLoading(true); await supabase.from('recipes').insert([{ product_name: selectedProductRecipe, ingredient_id: newRecipeEntry.ingredientId, quantity: parseFloat(newRecipeEntry.quantity) }]); setNewRecipeEntry({ ingredientId: '', quantity: '' }); loadData(); setLoading(false); };
+  const handleRemoveRecipeItem = async (id) => { if (confirm("¿Eliminar?")) { setLoading(true); await supabase.from('recipes').delete().eq('id', id); loadData(); setLoading(false); }};
+  const login = async (pin) => {
+    const { data, error } = await supabase.from('staff').select('*').eq('pin', pin).maybeSingle();
+    if (error || !data) { alert("PIN Incorrecto"); return; }
+    setUser(data);
+    if (['owner', 'manager'].includes(data.role)) setView('dashboard'); else if (data.role === 'caja') setView('caja'); else if (data.role === 'mesero') setView('pedidos'); else if (data.role === 'cocina') setView('cocina');
   };
-  
-  const handleAddIngredient = async () => {
-      const name = prompt("Nombre del nuevo insumo:");
-      if (!name) return;
-      const unit = prompt("Unidad (Und, Kg, Litro):");
-      await supabase.from('ingredients').insert([{ name, unit, stock: 0 }]);
-      loadData();
+  const handleAddItemToOrder = async (product) => { /* ... Lógica existente ... */ 
+      if (!selectedOrder || processing) return; if (!confirm(`¿Agregar ${product.name}?`)) return;
+      setProcessing(true); setLoading(true);
+      try {
+          await supabase.from('order_items').insert([{ order_id: selectedOrder.id, product_name: product.name, quantity: 1, price_at_time: product.price_usd, notes: 'ANEXO' }]);
+          await supabase.from('orders').update({ total_usd: selectedOrder.total_usd + product.price_usd, status: 'pendiente' }).eq('id', selectedOrder.id);
+          const productRecipe = recipes[product.name];
+          if (productRecipe) { for (let ingItem of productRecipe) { const dbIng = ingredients.find(i => i.id === ingItem.ingredientId); if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - ingItem.quantity }).eq('id', dbIng.id); } }
+          alert("Agregado"); if(confirm("¿Imprimir Ticket?")) { setTicketType('anexo'); setLastOrderTicket({ ...selectedOrder, items: [{ product_name: product.name, quantity: 1, notes: 'ANEXO' }] }); setTimeout(() => window.print(), 500); }
+          fetchOrders();
+      } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
-
-  // --- REPORTES ---
-  const getFilteredData = () => {
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    let filterDate = startOfDay;
-    if (reportFilter === 'week') filterDate = startOfWeek;
-    if (reportFilter === 'month') filterDate = startOfMonth;
-
-    const filteredOrders = orders.filter(o => new Date(o.created_at) >= filterDate && o.status === 'pagado');
-    const filteredExpenses = expenses.filter(e => new Date(e.date) >= filterDate);
-    return { filteredOrders, filteredExpenses };
+  const handleRemoveItemFromOrder = async (item) => { /* ... Lógica existente ... */
+      if (processing || !confirm(`¿Eliminar ${item.product_name}?`)) return; setProcessing(true); setLoading(true);
+      try {
+        await supabase.from('order_items').delete().eq('id', item.id);
+        await supabase.from('orders').update({ total_usd: Math.max(0, selectedOrder.total_usd - item.price_at_time) }).eq('id', selectedOrder.id);
+        const productRecipe = recipes[item.product_name];
+        if (productRecipe) { for (let ingItem of productRecipe) { const dbIng = ingredients.find(i => i.id === ingItem.ingredientId); if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + ingItem.quantity }).eq('id', dbIng.id); } }
+        fetchOrders();
+      } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
+  // Staff handler
+  const handleStaff = async (action, staffData) => { if (user.role !== 'owner') return; if (action === 'add') { const pin = prompt("PIN:"); if(pin) await supabase.from('staff').insert([{ name: staffData.name, role: staffData.role, pin }]); } else if (action === 'delete') { if(confirm("¿Borrar?")) await supabase.from('staff').delete().eq('id', staffData.id); } loadData(); };
+  const addToCart = (product) => setCart(prev => [...prev, { ...product, tempId: Date.now() + Math.random() }]);
+  const removeFromCart = (tempId) => setCart(prev => prev.filter(item => item.tempId !== tempId));
+  const updateCartNote = (tempId, note) => setCart(prev => prev.map(item => item.tempId === tempId ? { ...item, notes: note } : item));
 
-  useEffect(() => {
-      if (view === 'reportes') {
-          const fetchPayments = async () => {
-              const { filteredOrders } = getFilteredData();
-              const ids = filteredOrders.map(o => o.id);
-              if(ids.length === 0) { setPaymentBreakdown({}); return; }
-              const { data } = await supabase.from('payments').select('*').in('order_id', ids);
-              if(data) {
-                  const breakdown = data.reduce((acc, curr) => {
-                      acc[curr.method] = (acc[curr.method] || 0) + curr.amount_usd;
-                      return acc;
-                  }, {});
-                  setPaymentBreakdown(breakdown);
-              }
-          };
-          fetchPayments();
-      }
-  }, [view, reportFilter, orders]);
-
-  // --- UI START ---
+  // --- UI ---
   if (!user) return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
       <h1 className="text-4xl font-bold mb-8 text-yellow-500">DONDE MANOLO</h1>
@@ -421,9 +317,13 @@ export default function DondeManoloApp() {
 
   return (
     <div className="min-h-screen pb-20 bg-gray-100 font-sans">
-      {/* NAVBAR */}
       <nav className="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-lg no-print">
-        <div className="font-bold text-lg text-yellow-400">MANOLO <span className="text-xs text-gray-400">({user.role})</span></div>
+        <div className="flex flex-col">
+            <div className="font-bold text-lg text-yellow-400">MANOLO <span className="text-xs text-gray-400">({user.role})</span></div>
+            <div className="text-xs flex items-center gap-1">
+                {currentSession ? <span className="text-green-400 flex items-center gap-1"><Unlock size={10}/> CAJA ABIERTA #{currentSession.id}</span> : <span className="text-red-500 flex items-center gap-1"><Lock size={10}/> CAJA CERRADA</span>}
+            </div>
+        </div>
         <div className="flex gap-2">
             {['owner', 'manager'].includes(user.role) && (
                 <>
@@ -438,411 +338,323 @@ export default function DondeManoloApp() {
         </div>
       </nav>
 
-      {/* --- MODAL TICKET --- */}
-      {lastOrderTicket && !closingData && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center no-print">
-            <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl rounded-lg">
-                <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">
-                    {ticketType === 'anexo' ? 'ANEXO / AGREGADO' : 'ORDEN CREADA'}
-                </div>
-                <div className="mb-2">MESA: <span className="font-bold">{lastOrderTicket.info}</span></div>
-                <div className="mt-4 flex flex-col gap-2">
-                    <button onClick={() => window.print()} className="bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold text-lg shadow-md transition-colors">??? IMPRIMIR TICKET</button>
-                    <button onClick={() => setLastOrderTicket(null)} className="bg-gray-200 text-black p-2 rounded font-semibold text-sm">CERRAR</button>
-                </div>
-            </div>
-        </div>
+      {/* --- DASHBOARD (SOLO OWNER/MANAGER) --- */}
+      {view === 'dashboard' && (
+          <div className="max-w-7xl mx-auto p-4 space-y-6">
+              {/* GESTIÓN DE TURNO */}
+              <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-purple-500 flex justify-between items-center">
+                  <div>
+                      <h3 className="font-bold text-lg">Control de Turno</h3>
+                      {currentSession ? (
+                          <div className="text-sm text-gray-600">
+                              Abierto por: <strong>{currentSession.opened_by}</strong><br/>
+                              Base Inicial: <strong>${currentSession.base_amount}</strong>
+                          </div>
+                      ) : <p className="text-red-500 font-bold">La caja está cerrada actualmente.</p>}
+                  </div>
+                  <div>
+                      {!currentSession ? (
+                          <button onClick={handleOpenSession} className="bg-green-600 text-white px-6 py-3 rounded font-bold hover:bg-green-700 flex items-center gap-2"><Unlock/> ABRIR CAJA</button>
+                      ) : (
+                          <button onClick={handleCloseSession} className="bg-red-600 text-white px-6 py-3 rounded font-bold hover:bg-red-700 flex items-center gap-2"><Lock/> CERRAR TURNO</button>
+                      )}
+                  </div>
+              </div>
+
+              {/* TASA DEL DIA */}
+              <div className="bg-white p-6 rounded-lg shadow-md flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-gray-700">Tasa del día: <span className="text-green-600">1 USD = {tasa} Bs</span></h2>
+                  <div className="flex gap-2">
+                    <input type="number" value={tasa} onChange={e => setTasa(e.target.value)} className="border p-2 rounded w-24" />
+                    <button onClick={async () => { await supabase.from('settings').upsert({ key:'tasa', value: { usd: tasa }}); alert("Guardado"); }} className="bg-blue-600 text-white p-2 rounded"><Save/></button>
+                  </div>
+              </div>
+
+              {/* GASTOS */}
+              {user.role === 'owner' && (
+                  <div className="bg-white p-6 rounded-lg shadow-md">
+                      <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingDown className="text-red-500"/> Registrar Gasto</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded">
+                          <input placeholder="Descripción" className="border p-2 rounded w-full" value={newExpense.desc} onChange={e => setNewExpense({...newExpense, desc: e.target.value})} />
+                          <div className="flex gap-2">
+                              <input type="number" placeholder="Monto ($)" className="border p-2 rounded w-full" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} />
+                              <select className="border p-2 rounded" value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>Nomina</option><option>Servicios</option><option>Otros</option></select>
+                          </div>
+                          <button onClick={registerExpenseTransaction} disabled={!currentSession} className="md:col-span-2 bg-red-600 text-white py-2 rounded font-bold disabled:opacity-50">Registrar Salida</button>
+                      </div>
+                  </div>
+              )}
+          </div>
       )}
 
-      {/* DASHBOARD */}
-      <div className="max-w-7xl mx-auto p-4">
-        {view === 'dashboard' && (
-            <div className="space-y-6">
-                <div className="bg-white p-6 rounded-lg shadow-md border-l-4 border-blue-500 flex justify-between items-center">
-                    <div><h2 className="text-xl font-bold text-gray-700">Tasa del día</h2></div>
-                    <div className="flex gap-4 items-center">
-                        <span className="text-2xl font-bold text-green-600">1 USD =</span>
-                        <input type="number" value={tasa} onChange={e => setTasa(e.target.value)} className="border p-2 rounded text-xl w-32" />
-                        <button onClick={async () => { await supabase.from('settings').upsert({ key:'tasa', value: { usd: tasa }}); localStorage.setItem('tasa_bcv', tasa); alert("Guardado"); }} className="bg-blue-600 text-white px-4 py-2 rounded font-bold"><Save size={20}/></button>
-                    </div>
-                </div>
-
-                {/* BOTON DE MIGRACIÓN (SOLO OWNER) */}
-                {user.role === 'owner' && (
-                  <div className="bg-red-50 p-6 rounded-lg shadow-md border border-red-200 flex justify-between items-center">
-                      <div><h3 className="font-bold text-red-900">Configuración Inicial</h3><p className="text-sm text-red-800">Usar solo una vez para pasar las recetas del código a la BD.</p></div>
-                      <button onClick={handleMigrateRecipes} disabled={loading} className="bg-red-600 text-white px-4 py-2 rounded font-bold flex gap-2 items-center hover:bg-red-700"><Database size={20}/> ?? MIGRAR RECETAS</button>
+      {/* --- REPORTES (HISTORIAL Y EN VIVO) --- */}
+      {view === 'reportes' && (
+          <div className="max-w-7xl mx-auto p-4 space-y-6">
+              {/* REPORTE EN VIVO (PARCIAL) */}
+              {currentSession && (
+                  <div className="bg-blue-50 p-6 rounded-lg border border-blue-200 flex justify-between items-center no-print">
+                      <div>
+                          <h3 className="font-bold text-blue-900 text-lg">Turno Actual en Curso</h3>
+                          <p className="text-sm text-blue-800">Visualiza cómo va el corte sin cerrar la caja.</p>
+                      </div>
+                      <button onClick={() => generateReportData(currentSession, false)} className="bg-blue-600 text-white px-4 py-2 rounded font-bold flex gap-2"><Eye/> VER CORTE PARCIAL</button>
                   </div>
-                )}
+              )}
 
-                <div className="bg-white p-6 rounded-lg shadow-md">
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingDown className="text-red-500"/> Registrar Compra/Gasto</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded">
-                        <input placeholder="Descripción" className="border p-2 rounded w-full" value={newExpense.desc} onChange={e => setNewExpense({...newExpense, desc: e.target.value})} />
-                        <div className="flex gap-2">
-                             <input type="number" placeholder="Monto ($)" className="border p-2 rounded w-full" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} />
-                             <select className="border p-2 rounded" value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>Nomina</option><option>Servicios</option><option>Mantenimiento</option><option>Otros</option></select>
-                        </div>
-                        <div className="flex items-center gap-2 md:col-span-2 border-t pt-2 mt-2">
-                            <input type="checkbox" id="isStock" checked={newExpense.isStock} onChange={e => setNewExpense({...newExpense, isStock: e.target.checked})} className="w-5 h-5"/>
-                            <label htmlFor="isStock" className="font-bold text-gray-700">¿Es Compra de Inventario? (Suma Stock)</label>
-                        </div>
-                        {newExpense.isStock && (
-                            <div className="md:col-span-2 flex gap-2">
-                                <select className="border p-2 rounded w-full" onChange={e => setNewExpense({...newExpense, ingredientId: e.target.value})}>
-                                    <option value="">Seleccione Insumo...</option>
-                                    {ingredients.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                                </select>
-                                <input type="number" placeholder="Cant" className="border p-2 rounded w-24" onChange={e => setNewExpense({...newExpense, quantity: e.target.value})} />
-                            </div>
-                        )}
-                        <button onClick={registerExpenseTransaction} className="md:col-span-2 bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700">Registrar Salida</button>
-                    </div>
-                </div>
+              {/* HISTORIAL DE CIERRES */}
+              <div className="bg-white p-6 rounded-lg shadow-md no-print">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Calendar/> Historial de Cierres (Últimos 20)</h3>
+                  <table className="w-full text-left border-collapse">
+                      <thead>
+                          <tr className="bg-gray-100 border-b">
+                              <th className="p-3">ID</th>
+                              <th className="p-3">Fecha Cierre</th>
+                              <th className="p-3">Abierto Por</th>
+                              <th className="p-3">Cerrado Por</th>
+                              <th className="p-3">Acción</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          {sessionHistory.map(session => (
+                              <tr key={session.id} className="border-b hover:bg-gray-50">
+                                  <td className="p-3 font-mono">#{session.id}</td>
+                                  <td className="p-3">{new Date(session.closed_at).toLocaleString()}</td>
+                                  <td className="p-3">{session.opened_by}</td>
+                                  <td className="p-3">{session.closed_by}</td>
+                                  <td className="p-3">
+                                      <button onClick={() => generateReportData(session, true)} className="text-blue-600 hover:underline flex gap-1 items-center font-bold">
+                                          <Printer size={16}/> Ver Reporte
+                                      </button>
+                                  </td>
+                              </tr>
+                          ))}
+                          {sessionHistory.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-gray-500">No hay cierres registrados aún.</td></tr>}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      )}
 
-                {user.role === 'owner' ? (
-                    <div className="bg-white p-6 rounded-lg shadow-md">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-lg flex items-center gap-2"><Users/> Gestión de Personal</h3>
-                            <button onClick={() => handleStaff('add', { name: prompt("Nombre:"), role: prompt("Rol:") })} className="bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1 text-sm"><PlusCircle size={16}/> Nuevo</button>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                            {staffList.map(s => (
-                                <div key={s.id} className="border p-3 rounded flex justify-between items-center bg-gray-50">
-                                    <div><div className="font-bold">{s.name}</div><div className="text-xs text-gray-500 uppercase">{s.role}</div></div>
-                                    <div className="flex gap-2"><button onClick={() => handleStaff('updatePin', s)} className="text-blue-500">??</button><button onClick={() => handleStaff('delete', s)} className="text-red-500">???</button></div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ) : <div className="p-4 bg-yellow-50 text-yellow-800 rounded border border-yellow-200">?? La gestión de usuarios está reservada solo para el Dueño.</div>}
-            </div>
-        )}
-
-        {/* INVENTARIO (CON EDITOR DE RECETAS) */}
-        {view === 'inventario' && (
-            <div className="bg-white p-6 rounded shadow-lg">
+      {/* --- INVENTARIO --- */}
+      {view === 'inventario' && (
+            <div className="max-w-7xl mx-auto p-4 bg-white rounded shadow-lg">
                 <div className="flex justify-between items-center mb-6 no-print">
                     <h2 className="text-2xl font-bold">Inventario</h2>
                     <div className="flex gap-4">
                         <button onClick={() => setInvSubView('insumos')} className={`font-bold ${invSubView==='insumos'?'text-yellow-600 border-b-2 border-yellow-600':''}`}>INSUMOS</button>
                         <button onClick={() => setInvSubView('recetas')} className={`font-bold ${invSubView==='recetas'?'text-yellow-600 border-b-2 border-yellow-600':''}`}>RECETAS</button>
                     </div>
-                    <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2 rounded"><Printer size={16}/></button>
                 </div>
-                
                 {invSubView === 'insumos' ? (
                     <div className="overflow-x-auto">
-                         <div className="mb-4 flex justify-end"><button onClick={handleAddIngredient} className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2"><PlusCircle size={16}/> Nuevo Item</button></div>
-                        <table className="w-full text-left border-collapse">
-                            <thead><tr className="bg-gray-100 border-b"><th className="p-3">Ingrediente</th><th className="p-3">Stock</th><th className="p-3">Unidad</th>{user.role === 'owner' && <th className="p-3 no-print">Ajuste</th>}</tr></thead>
-                            <tbody>
-                                {ingredients.map(ing => (
-                                    <tr key={ing.id} className="border-b hover:bg-gray-50">
-                                        <td className="p-3">{ing.name}</td>
-                                        <td className={`p-3 font-bold ${ing.stock < 10 ? 'text-red-600' : 'text-gray-800'}`}>{Number(ing.stock).toFixed(2)}</td>
-                                        <td className="p-3 text-sm text-gray-500">{ing.unit}</td>
-                                        {user.role === 'owner' && <td className="p-3 no-print"><button onClick={async () => { const val = prompt(`Nuevo stock para ${ing.name}:`, ing.stock); if(val) { await supabase.from('ingredients').update({stock: val}).eq('id', ing.id); loadData(); }}} className="text-blue-600 hover:text-blue-800"><Edit3 size={18}/></button></td>}
-                                    </tr>
-                                ))}
-                            </tbody>
+                        <div className="mb-4 flex justify-end"><button onClick={handleAddIngredient} className="bg-green-600 text-white px-3 py-1 rounded text-sm">+ Nuevo</button></div>
+                        <table className="w-full text-left">
+                            <thead><tr className="bg-gray-100"><th className="p-2">Item</th><th className="p-2">Stock</th><th className="p-2">Und</th>{user.role === 'owner' && <th className="p-2 no-print">Edit</th>}</tr></thead>
+                            <tbody>{ingredients.map(ing => (<tr key={ing.id} className="border-b"><td className="p-2">{ing.name}</td><td className={`p-2 font-bold ${ing.stock < 10 ? 'text-red-600' : 'text-gray-800'}`}>{Number(ing.stock).toFixed(2)}</td><td className="p-2 text-sm">{ing.unit}</td>{user.role === 'owner' && <td className="p-2 no-print"><button onClick={async () => { const v = prompt("Stock:", ing.stock); if(v) { await supabase.from('ingredients').update({stock:v}).eq('id', ing.id); loadData(); }}} className="text-blue-600"><Edit3 size={16}/></button></td>}</tr>))}</tbody>
                         </table>
                     </div>
                 ) : (
-                    // VISTA DE EDITOR DE RECETAS
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="border-r pr-4">
-                            <h3 className="font-bold mb-4 flex items-center gap-2 text-blue-700"><BookOpen size={20}/> 1. Elige Plato</h3>
-                            <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-                                {products.map(p => (
-                                    <button key={p.id} onClick={() => setSelectedProductRecipe(p.name)} className={`w-full text-left p-2 rounded text-sm ${selectedProductRecipe === p.name ? 'bg-blue-600 text-white font-bold' : 'hover:bg-gray-100'}`}>{p.name}</button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="md:col-span-2">
-                            {selectedProductRecipe ? (
-                                <>
-                                    <h3 className="font-bold mb-4">Ingredientes de: <span className="text-blue-600 uppercase">{selectedProductRecipe}</span></h3>
-                                    <div className="bg-gray-50 p-4 rounded mb-6 flex gap-2 items-end">
-                                        <div className="flex-1">
-                                            <label className="text-xs block text-gray-500">Insumo</label>
-                                            <select className="w-full border p-2 rounded" value={newRecipeEntry.ingredientId} onChange={e => setNewRecipeEntry({...newRecipeEntry, ingredientId: e.target.value})}>
-                                                <option value="">Seleccionar...</option>
-                                                {ingredients.map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="w-24">
-                                            <label className="text-xs block text-gray-500">Cant.</label>
-                                            <input type="number" step="0.01" className="w-full border p-2 rounded" value={newRecipeEntry.quantity} onChange={e => setNewRecipeEntry({...newRecipeEntry, quantity: e.target.value})} />
-                                        </div>
-                                        <button onClick={handleAddIngredientToRecipe} className="bg-blue-600 text-white p-2 rounded"><PlusCircle/></button>
-                                    </div>
-                                    <table className="w-full text-sm">
-                                        <thead><tr className="text-left text-gray-400 border-b"><th>Ingrediente</th><th>Cantidad</th><th></th></tr></thead>
-                                        <tbody>
-                                            {(recipes[selectedProductRecipe] || []).map(rItem => {
-                                                const ing = ingredients.find(i => i.id === rItem.ingredientId);
-                                                return (
-                                                    <tr key={rItem.id} className="border-b hover:bg-red-50 transition">
-                                                        <td className="py-2 font-medium">{ing?.name || 'Cargando...'}</td>
-                                                        <td>{rItem.quantity} {ing?.unit}</td>
-                                                        <td className="text-right"><button onClick={() => handleRemoveRecipeItem(rItem.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
-                                                    </tr>
-                                                )
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </>
-                            ) : <div className="h-full flex flex-col items-center justify-center text-gray-400 italic"><Package size={48} className="mb-2 opacity-20"/> Selecciona un plato del menú.</div>}
-                        </div>
+                        <div className="border-r pr-4 max-h-[60vh] overflow-y-auto">{products.map(p => (<button key={p.id} onClick={() => setSelectedProductRecipe(p.name)} className={`w-full text-left p-2 rounded text-sm ${selectedProductRecipe === p.name ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}>{p.name}</button>))}</div>
+                        <div className="md:col-span-2">{selectedProductRecipe ? (<>
+                            <h3 className="font-bold mb-4">Receta: <span className="text-blue-600">{selectedProductRecipe}</span></h3>
+                            <div className="bg-gray-50 p-2 rounded mb-4 flex gap-2"><select className="flex-1 border p-1" value={newRecipeEntry.ingredientId} onChange={e => setNewRecipeEntry({...newRecipeEntry, ingredientId: e.target.value})}>{ingredients.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select><input type="number" className="w-20 border p-1" value={newRecipeEntry.quantity} onChange={e => setNewRecipeEntry({...newRecipeEntry, quantity: e.target.value})} /><button onClick={handleAddIngredientToRecipe} className="bg-blue-600 text-white p-1 rounded"><PlusCircle/></button></div>
+                            <table className="w-full text-sm"><tbody>{(recipes[selectedProductRecipe] || []).map(rItem => { const ing = ingredients.find(i => i.id === rItem.ingredientId); return (<tr key={rItem.id} className="border-b"><td className="py-2">{ing?.name}</td><td>{rItem.quantity} {ing?.unit}</td><td className="text-right"><button onClick={() => handleRemoveRecipeItem(rItem.id)} className="text-red-400"><Trash2 size={16}/></button></td></tr>) })}</tbody></table>
+                        </>) : <div className="text-gray-400 italic">Selecciona un plato</div>}</div>
                     </div>
                 )}
             </div>
         )}
 
-        {/* REPORTES */}
-        {(view === 'reportes' || (view === 'caja' && user.role === 'caja')) && (
-            <div className="space-y-6">
-                <div className="bg-white p-6 rounded shadow-lg no-print">
-                     {(user.role === 'owner' || user.role === 'manager' || user.role === 'caja') && (
-                        <div className="mb-6 p-4 bg-orange-100 rounded border border-orange-300 flex justify-between items-center">
-                            <div><h3 className="font-bold text-orange-900 text-lg">Cierre de Caja Operativo</h3><p className="text-sm text-orange-800">Corta a las 6:00 AM. Genera PDF Carta.</p></div>
-                            <button onClick={handleDailyClose} className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-bold shadow flex items-center gap-2"><FileText size={20}/> GENERAR REPORTE PDF</button>
-                        </div>
-                     )}
-                    <div className="flex gap-4 justify-center mb-6">
-                        <button onClick={() => setReportFilter('today')} className={`px-4 py-2 rounded font-bold ${reportFilter==='today'?'bg-blue-600 text-white':'bg-gray-200'}`}>Hoy</button>
-                        <button onClick={() => setReportFilter('week')} className={`px-4 py-2 rounded font-bold ${reportFilter==='week'?'bg-blue-600 text-white':'bg-gray-200'}`}>Semana</button>
-                        <button onClick={() => setReportFilter('month')} className={`px-4 py-2 rounded font-bold ${reportFilter==='month'?'bg-blue-600 text-white':'bg-gray-200'}`}>Mes</button>
-                        <button onClick={() => window.print()} className="bg-gray-800 text-white px-4 py-2 rounded flex items-center gap-2"><Printer size={16}/> Imprimir Vista</button>
-                    </div>
-                </div>
-                <div className="bg-white p-8 rounded shadow-lg" id="reporte-imprimible">
-                    <div className="text-center mb-6 border-b pb-4"><h1 className="text-2xl font-bold">REPORTE (VISTA PREVIA)</h1><p className="text-gray-500 capitalize">Filtro: {reportFilter}</p></div>
-                    <div className="mb-8"><h3 className="font-bold border-b mb-2">Ingresos por Método</h3>
-                        <div className="grid grid-cols-3 gap-4">
-                            {Object.entries(paymentBreakdown).map(([method, amount]) => (
-                                <div key={method} className="bg-green-50 p-2 rounded border border-green-200 text-center">
-                                    <div className="text-xs text-gray-500 uppercase">{method.replace('_', ' ')}</div><div className="font-bold text-lg">${amount.toFixed(2)}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div><h3 className="font-bold border-b mb-2">Gastos</h3>
-                        <table className="w-full text-sm"><tbody>{getFilteredData().filteredExpenses.map(e => (<tr key={e.id}><td>{e.description}</td><td className="text-right text-red-600">-${e.amount.toFixed(2)}</td></tr>))}</tbody></table>
-                    </div>
-                </div>
-            </div>
-        )}
+      {/* --- PEDIDOS --- */}
+      {view === 'pedidos' && (
+          <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 md:grid-cols-3 gap-6 h-[80vh]">
+              <div className="md:col-span-2 overflow-y-auto bg-white p-4 rounded shadow-lg">
+                  <h2 className="font-bold text-xl mb-4">Menú</h2>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                      {products.map(p => (
+                          <div key={p.id} onClick={() => addToCart(p)} className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition transform hover:scale-105">
+                              <h3 className="font-bold text-gray-800">{p.name}</h3><p className="text-green-600 font-bold">${p.price_usd}</p>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+              <div className="bg-white p-4 rounded shadow-lg flex flex-col h-full">
+                  <h2 className="font-bold text-xl mb-2">Comanda</h2>
+                  <div className="flex gap-2 mb-4"><select className="border p-2 rounded" onChange={e => setServiceInfo({...serviceInfo, type: e.target.value})}><option>Mesa</option><option>Para Llevar</option><option>Delivery</option></select><input placeholder="Cliente/Mesa" className="border p-2 rounded w-full" onChange={e => setServiceInfo({...serviceInfo, val: e.target.value})} value={serviceInfo.val} /></div>
+                  <div className="flex-1 overflow-y-auto border-t py-2">{cart.map(item => (<div key={item.tempId} className="flex justify-between border-b py-2 text-sm"><div><span className="font-bold">{item.name}</span> <div className="text-xs text-gray-500">${item.price_usd}</div><input placeholder="Notas..." className="text-xs border-b w-full mt-1 bg-transparent" value={item.notes || ''} onChange={e => updateCartNote(item.tempId, e.target.value)} /></div><button onClick={() => removeFromCart(item.tempId)} className="text-red-500"><Trash2 size={16}/></button></div>))}</div>
+                  <div className="pt-4 border-t"><button onClick={sendOrder} disabled={!currentSession} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg disabled:bg-gray-400">{!currentSession ? 'CAJA CERRADA' : 'ENVIAR A COCINA'}</button></div>
+              </div>
+          </div>
+      )}
 
-        {/* PEDIDOS */}
-        {view === 'pedidos' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[80vh]">
-                <div className="md:col-span-2 overflow-y-auto bg-white p-4 rounded shadow-lg">
-                    <h2 className="font-bold text-xl mb-4">Menú (Nuevo Pedido)</h2>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                        {products.map(p => (
-                            <div key={p.id} onClick={() => addToCart(p)} className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition transform hover:scale-105">
-                                <h3 className="font-bold text-gray-800">{p.name}</h3>
-                                <p className="text-green-600 font-bold">${p.price_usd}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                <div className="bg-white p-4 rounded shadow-lg flex flex-col h-full">
-                    <h2 className="font-bold text-xl mb-2">Comanda Actual</h2>
-                    <div className="flex gap-2 mb-4">
-                        <select className="border p-2 rounded" onChange={e => setServiceInfo({...serviceInfo, type: e.target.value})}><option>Mesa</option><option>Para Llevar</option><option>Delivery</option></select>
-                        <input placeholder="Info Cliente/Mesa" className="border p-2 rounded w-full" onChange={e => setServiceInfo({...serviceInfo, val: e.target.value})} value={serviceInfo.val} />
-                    </div>
-                    <div className="flex-1 overflow-y-auto border-t border-b py-2 space-y-2">
-                        {cart.length === 0 ? <p className="text-center text-gray-400 mt-4">Carrito vacío</p> : 
-                         cart.map((item) => (
-                            <div key={item.tempId} className="flex justify-between items-start text-sm bg-gray-50 p-2 rounded">
-                                <div><span className="font-bold">{item.name}</span> <div className="text-xs text-gray-500">${item.price_usd}</div><input placeholder="Notas..." className="text-xs border-b w-full mt-1 bg-transparent" value={item.notes || ''} onChange={e => updateCartNote(item.tempId, e.target.value)} /></div>
-                                <button onClick={() => removeFromCart(item.tempId)} className="text-red-500 hover:text-red-700 p-2"><Trash2 size={18}/></button>
-                            </div>
-                         ))}
-                    </div>
-                    <div className="mt-4 pt-4 border-t">
-                        <div className="flex justify-between text-xl font-bold mb-4"><span>Total:</span><span>${cart.reduce((s, i) => s + i.price_usd, 0).toFixed(2)}</span></div>
-                        <button onClick={sendOrder} disabled={loading || processing} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-green-700 disabled:opacity-50">{processing ? 'PROCESANDO...' : (loading ? '...' : 'ENVIAR A COCINA')}</button>
-                    </div>
-                </div>
-            </div>
-        )}
+      {/* --- COCINA --- */}
+      {view === 'cocina' && (
+          <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {orders.filter(o => o.status === 'pendiente').map(o => (
+                  <div key={o.id} className="bg-white rounded-lg shadow-md overflow-hidden border-l-8 border-yellow-500">
+                      <div className="bg-yellow-50 p-3 border-b border-yellow-100 flex justify-between items-center"><span className="font-bold text-lg text-gray-800">{o.service_type}</span><span className="text-sm font-bold bg-white px-2 rounded border">{o.info}</span></div>
+                      <div className="p-4"><ul className="space-y-3">{o.order_items.map(item => (<li key={item.id} className="text-gray-800 leading-tight"><div className="font-bold text-lg">• {item.product_name}</div>{item.notes && <div className="text-red-600 text-sm bg-red-50 p-1 rounded mt-1">?? {item.notes}</div>}</li>))}</ul></div>
+                      <button onClick={async () => { await supabase.from('orders').update({status:'listo'}).eq('id', o.id); fetchOrders(); }} className="w-full bg-green-600 text-white font-bold py-3 hover:bg-green-700">MARCAR LISTO ?</button>
+                  </div>
+              ))}
+          </div>
+      )}
 
-        {/* COCINA */}
-        {view === 'cocina' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {orders.filter(o => o.status === 'pendiente').map(o => (
-                    <div key={o.id} className="bg-white rounded-lg shadow-md overflow-hidden border-l-8 border-yellow-500">
-                        <div className="bg-yellow-50 p-3 border-b border-yellow-100 flex justify-between items-center"><span className="font-bold text-lg text-gray-800">{o.service_type}</span><span className="text-sm font-bold bg-white px-2 rounded border">{o.info}</span></div>
-                        <div className="p-4"><ul className="space-y-3">{o.order_items.map(item => (<li key={item.id} className="text-gray-800 leading-tight"><div className="font-bold text-lg">• {item.product_name}</div>{item.notes && <div className="text-red-600 text-sm bg-red-50 p-1 rounded mt-1">?? {item.notes}</div>}</li>))}</ul></div>
-                        <button onClick={async () => { await supabase.from('orders').update({status:'listo'}).eq('id', o.id); fetchOrders(); }} className="w-full bg-green-600 text-white font-bold py-3 hover:bg-green-700">MARCAR LISTO ?</button>
-                    </div>
-                ))}
-            </div>
-        )}
-        
-        {/* CAJA */}
-        {view === 'caja' && (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-4 rounded shadow">
-                    <div className="flex justify-between items-center mb-4"><h2 className="font-bold text-lg">Mesas / Pedidos Activos</h2></div>
-                    {orders.filter(o => o.status !== 'pagado').map(o => (
-                        <div key={o.id} onClick={() => { setSelectedOrder(o); setCurrentPayments([]); setIsEditingOrder(false); }} className={`p-4 border-b cursor-pointer hover:bg-blue-50 flex justify-between items-center ${selectedOrder?.id === o.id ? 'bg-blue-100 border-l-4 border-blue-600' : ''}`}>
-                            <div><div className="font-bold text-lg">{o.service_type} - {o.info}</div><span className={`text-xs px-2 py-1 rounded ${o.status==='listo'?'bg-green-200 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{o.status.toUpperCase()}</span></div>
-                            <div className="text-right"><div className="font-bold text-xl">${o.total_usd.toFixed(2)}</div></div>
-                        </div>
-                    ))}
-                </div>
-                {selectedOrder && (
-                    <div className="bg-white p-6 rounded shadow-lg h-fit sticky top-20">
-                        <div className="flex justify-between border-b pb-2 mb-4">
-                             {(user.role === 'owner' || user.role === 'manager' || user.role === 'caja') && (
-                                <button onClick={() => setIsEditingOrder(false)} className={`flex-1 py-2 font-bold ${!isEditingOrder ? 'border-b-4 border-blue-600 text-blue-800' : 'text-gray-400'}`}>?? COBRAR</button>
-                             )}
-                             <button onClick={() => setIsEditingOrder(true)} className={`flex-1 py-2 font-bold ${isEditingOrder || (user.role !== 'owner' && user.role !== 'manager' && user.role !== 'caja') ? 'border-b-4 border-yellow-500 text-yellow-800' : 'text-gray-400'}`}>?? EDITAR</button>
-                        </div>
-                        
-                        {!isEditingOrder && (user.role === 'owner' || user.role === 'manager' || user.role === 'caja') ? (
-                            <>
-                                <div className="mb-6 bg-gray-50 p-4 rounded"><div className="flex justify-between text-lg mb-2"><span>Total:</span><span className="font-bold">${selectedOrder.total_usd.toFixed(2)}</span></div><div className="flex justify-between text-lg mb-2 text-blue-600"><span>Bolívares:</span><span className="font-bold">Bs {(selectedOrder.total_usd * tasa).toFixed(2)}</span></div></div>
-                                <div className="mb-6">
-                                    <div className="flex gap-2 mb-2">
-                                        <input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
-                                        <select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
-                                            <option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option>
-                                            {(user.role === 'owner' || user.role === 'manager') && (<><option value="obsequio">?? OBSEQUIO / CORTESÍA</option><option value="personal">????? CONSUMO PERSONAL</option></>)}
-                                        </select>
-                                    </div>
-                                    <button disabled={processing} onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700">Agregar Pago</button>
-                                </div>
-                                <div className="space-y-2 mb-6">
-                                    {currentPayments.map((p, i) => (
-                                        <div key={i} className="flex justify-between border-b pb-1 text-sm items-center">
-                                            <span>{p.method}</span>
-                                            <div className="flex items-center gap-2"><span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span><button onClick={() => {const newP = [...currentPayments]; newP.splice(i, 1); setCurrentPayments(newP);}} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16}/></button></div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="border-t pt-4">
-                                    <div className="flex justify-between font-bold text-lg mb-4"><span>Restante:</span>{(() => { const paid = currentPayments.reduce((s, p) => s + p.amount_usd, 0); const rest = selectedOrder.total_usd - paid; return ( <div className="text-right"><div className={rest > 0.01 ? 'text-red-600' : 'text-green-600'}>${Math.max(0, rest).toFixed(2)}</div></div> ) })()}</div>
-                                    <button onClick={handlePayment} disabled={processing} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700 disabled:opacity-50">{processing ? 'PROCESANDO...' : 'FINALIZAR VENTA'}</button>
-                                </div>
-                            </>
-                        ) : (
-                             <>
-                                <div className="mb-4 bg-yellow-50 p-3 rounded text-sm text-yellow-800">Agrega o quita items.</div>
-                                <div className="max-h-60 overflow-y-auto mb-4 border rounded">
-                                    {selectedOrder.order_items?.map(item => (
-                                        <div key={item.id} className="flex justify-between items-center p-2 border-b bg-white">
-                                            <div><div className="font-bold text-sm">{item.product_name}</div><div className="text-xs text-gray-500">${item.price_at_time}</div></div>
-                                            <button onClick={() => handleRemoveItemFromOrder(item)} disabled={processing} className="text-red-500 hover:bg-red-50 p-2 rounded disabled:opacity-30"><XCircle size={20}/></button>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="border-t pt-4">
-                                    <h4 className="font-bold mb-2">Agregar Producto (Extras):</h4>
-                                    <div className="flex items-center gap-2 mb-2"><Search className="text-gray-400"/><input className="border p-2 rounded w-full" placeholder="Buscar..." value={itemSearch} onChange={e => setItemSearch(e.target.value)} /></div>
-                                    <div className="grid grid-cols-2 gap-2 h-32 overflow-y-auto">
-                                        {products.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).map(p => (
-                                            <button key={p.id} disabled={processing} onClick={() => handleAddItemToOrder(p)} className="text-xs p-2 border rounded hover:bg-green-50 text-left disabled:opacity-50"><div className="font-bold">{p.name}</div><div className="text-green-600">${p.price_usd}</div></button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                )}
-            </div>
-        )}
-      </div>
+      {/* --- CAJA --- */}
+      {view === 'caja' && (
+           <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {!currentSession && (['owner', 'manager'].includes(user.role)) && (
+                  <div className="col-span-2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-center">
+                      <strong className="font-bold">¡La caja está cerrada!</strong>
+                      <span className="block sm:inline"> Debes abrir un turno para procesar cobros.</span>
+                      <button onClick={() => setView('dashboard')} className="mt-2 bg-red-600 text-white px-4 py-2 rounded font-bold">IR AL DASHBOARD PARA ABRIR</button>
+                  </div>
+              )}
+              <div className="bg-white p-4 rounded shadow">
+                  <h2 className="font-bold text-lg mb-4">Mesas Activas (Turno #{currentSession?.id || '?'})</h2>
+                  {orders.filter(o => o.status !== 'pagado').map(o => (
+                      <div key={o.id} onClick={() => { setSelectedOrder(o); setCurrentPayments([]); setIsEditingOrder(false); }} className={`p-4 border-b cursor-pointer hover:bg-blue-50 flex justify-between items-center ${selectedOrder?.id === o.id ? 'bg-blue-100 border-l-4 border-blue-600' : ''}`}>
+                          <div><div className="font-bold text-lg">{o.service_type} - {o.info}</div><span className={`text-xs px-2 py-1 rounded ${o.status==='listo'?'bg-green-200 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{o.status.toUpperCase()}</span></div>
+                          <div className="text-right"><div className="font-bold text-xl">${o.total_usd.toFixed(2)}</div></div>
+                      </div>
+                  ))}
+              </div>
+              {selectedOrder && (
+                  <div className="bg-white p-6 rounded shadow-lg h-fit sticky top-20">
+                      <div className="flex justify-between border-b pb-2 mb-4">
+                           {(['owner', 'manager', 'caja'].includes(user.role)) && (<button onClick={() => setIsEditingOrder(false)} className={`flex-1 py-2 font-bold ${!isEditingOrder ? 'border-b-4 border-blue-600 text-blue-800' : 'text-gray-400'}`}>?? COBRAR</button>)}
+                           <button onClick={() => setIsEditingOrder(true)} className={`flex-1 py-2 font-bold ${isEditingOrder ? 'border-b-4 border-yellow-500 text-yellow-800' : 'text-gray-400'}`}>?? EDITAR</button>
+                      </div>
+                      {!isEditingOrder ? (
+                          <>
+                              <div className="mb-6 bg-gray-50 p-4 rounded"><div className="flex justify-between text-lg mb-2"><span>Total:</span><span className="font-bold">${selectedOrder.total_usd.toFixed(2)}</span></div><div className="flex justify-between text-lg mb-2 text-blue-600"><span>Bolívares:</span><span className="font-bold">Bs {(selectedOrder.total_usd * tasa).toFixed(2)}</span></div></div>
+                              <div className="mb-6"><div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option>{['owner', 'manager'].includes(user.role) && (<><option value="obsequio">?? OBSEQUIO / CORTESÍA</option><option value="personal">????? CONSUMO PERSONAL</option></>)}</select></div><button disabled={processing || !currentSession} onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">Agregar Pago</button></div>
+                              <div className="space-y-2 mb-6">{currentPayments.map((p, i) => (<div key={i} className="flex justify-between border-b pb-1 text-sm items-center"><span>{p.method}</span><div className="flex items-center gap-2"><span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span><button onClick={() => {const newP = [...currentPayments]; newP.splice(i, 1); setCurrentPayments(newP);}} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16}/></button></div></div>))}</div>
+                              <div className="border-t pt-4"><button onClick={handlePayment} disabled={processing || !currentSession} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700 disabled:opacity-50">{!currentSession ? 'CAJA CERRADA' : 'FINALIZAR VENTA'}</button></div>
+                          </>
+                      ) : (
+                          <>
+                              <div className="max-h-60 overflow-y-auto mb-4 border rounded">{selectedOrder.order_items?.map(item => (<div key={item.id} className="flex justify-between items-center p-2 border-b bg-white"><div><div className="font-bold text-sm">{item.product_name}</div><div className="text-xs text-gray-500">${item.price_at_time}</div></div><button onClick={() => handleRemoveItemFromOrder(item)} disabled={processing} className="text-red-500 hover:bg-red-50 p-2 rounded disabled:opacity-30"><XCircle size={20}/></button></div>))}</div>
+                              <div className="border-t pt-4"><div className="flex items-center gap-2 mb-2"><Search className="text-gray-400"/><input className="border p-2 rounded w-full" placeholder="Buscar..." value={itemSearch} onChange={e => setItemSearch(e.target.value)} /></div><div className="grid grid-cols-2 gap-2 h-32 overflow-y-auto">{products.filter(p => p.name.toLowerCase().includes(itemSearch.toLowerCase())).map(p => (<button key={p.id} disabled={processing} onClick={() => handleAddItemToOrder(p)} className="text-xs p-2 border rounded hover:bg-green-50 text-left disabled:opacity-50"><div className="font-bold">{p.name}</div><div className="text-green-600">${p.price_usd}</div></button>))}</div></div>
+                          </>
+                      )}
+                  </div>
+              )}
+          </div>
+      )}
 
-      <style>{`
-        @media print {
-            .no-print { display: none !important; }
-            body { background: white; }
-            #reporte-imprimible { box-shadow: none; margin: 0; padding: 0; }
-        }
-      `}</style>
-
-    {/* --- TICKET DE 80MM (COCINA Y ANEXOS) --- */}
-    {lastOrderTicket && !closingData && (
-      <div id="ticket-impresion">
-        <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
-        <div className="ticket-centrado">Soluciones Tecno Educativas M&F</div>
-        <div className="ticket-linea"></div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>FECHA: {new Date().toLocaleDateString()}</span>
-            <span>HORA: {new Date().toLocaleTimeString()}</span>
+      {/* --- MODAL TICKET --- */}
+      {lastOrderTicket && !closingData && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center no-print">
+            <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl rounded-lg">
+                <div className="text-center font-bold text-lg border-b border-dashed pb-2 mb-2">{ticketType === 'anexo' ? 'ANEXO / AGREGADO' : 'ORDEN CREADA'}</div>
+                <div className="mb-2">MESA: <span className="font-bold">{lastOrderTicket.info}</span></div>
+                <button onClick={() => window.print()} className="w-full bg-orange-600 text-white p-3 rounded mb-2 font-bold">IMPRIMIR</button>
+                <button onClick={() => setLastOrderTicket(null)} className="w-full bg-gray-200 p-2 rounded">CERRAR</button>
+            </div>
         </div>
-        <div className="ticket-negrita" style={{ marginTop: '5px' }}>
-            {lastOrderTicket.service_type}: {lastOrderTicket.info}
-        </div>
-        <div className="ticket-linea"></div>
-        <div className="ticket-centrado ticket-negrita">
-            {ticketType === 'anexo' ? '*** ANEXO / EXTRA ***' : 'ORDEN DE COCINA'}
-        </div>
-        <div className="ticket-linea"></div>
-        <div className="lista-productos">
+      )}
+
+      {/* --- TICKET IMPRESIÓN (80MM) --- */}
+      {lastOrderTicket && !closingData && (
+        <div id="ticket-impresion">
+          <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
+          <div className="ticket-centrado">M&F</div>
+          <div className="ticket-linea"></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>{new Date().toLocaleDateString()}</span><span>{new Date().toLocaleTimeString()}</span></div>
+          <div className="ticket-negrita" style={{ marginTop: '5px' }}>{lastOrderTicket.service_type}: {lastOrderTicket.info}</div>
+          <div className="ticket-linea"></div>
+          <div className="ticket-centrado ticket-negrita">{ticketType === 'anexo' ? '*** ANEXO ***' : 'COCINA'}</div>
+          <div className="ticket-linea"></div>
           {lastOrderTicket.items?.map((item, index) => (
             <div key={index} style={{ marginBottom: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span className="ticket-negrita" style={{ fontSize: '18px' }}>{item.quantity} x {item.product_name}</span>
-                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span className="ticket-negrita" style={{ fontSize: '18px' }}>{item.quantity} x {item.product_name}</span></div>
                 {item.notes && <div style={{ fontSize: '12px', fontStyle: 'italic' }}>(Nota: {item.notes})</div>}
             </div>
           ))}
+          <div className="ticket-linea"></div>
         </div>
-        <div className="ticket-linea"></div>
-        <br />
-        <div className="ticket-centrado">*** {ticketType === 'anexo' ? 'FIN ANEXO' : 'FIN ORDEN'} ***</div>
-      </div>
-    )}
+      )}
 
-    {/* --- DOCUMENTO DE CIERRE CARTA/PDF --- */}
+    {/* --- DOCUMENTO DE CIERRE DETALLADO (PDF) --- */}
     {closingData && (
         <div id="cierre-impresion" className="p-8 font-sans">
-            <div className="border-b-2 border-black pb-4 mb-6 flex justify-between items-end">
-                <div><h1 className="text-4xl font-bold text-gray-800">REPORTE DE CIERRE</h1><p className="text-xl text-gray-600">Donde Manolo</p></div>
-                <div className="text-right"><p><strong>Fecha Operativa:</strong> {closingData.dateStr}</p><p className="text-sm text-gray-500">Impreso: {closingData.printDate}</p></div>
+            <div className="border-b-2 border-black pb-4 mb-6 flex justify-between">
+                <div><h1 className="text-3xl font-bold">REPORTE DE TURNO</h1><p className="text-gray-600">Donde Manolo - Control de Caja</p></div>
+                <div className="text-right text-sm"><p><strong>Apertura:</strong> {closingData.opened_at}</p><p><strong>Cierre:</strong> {closingData.closed_at}</p><p><strong>ID Sesión:</strong> #{closingData.id}</p></div>
             </div>
-            <div className="grid grid-cols-2 gap-8 mb-8">
-                <div className="border rounded p-4 bg-gray-50">
-                    <h3 className="font-bold text-lg mb-4 border-b border-gray-300 pb-2">RESUMEN FINANCIERO</h3>
-                    <div className="flex justify-between text-lg mb-2"><span>Ventas Totales:</span><span className="font-bold text-green-700">${closingData.sales.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-lg mb-2"><span>Gastos Operativos:</span><span className="text-red-600">-${closingData.expenses.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-xl font-bold mt-4 pt-4 border-t border-black"><span>GANANCIA NETA:</span><span>${closingData.net.toFixed(2)}</span></div>
-                </div>
-                <div className="border rounded p-4 bg-gray-50">
-                     <h3 className="font-bold text-lg mb-4 border-b border-gray-300 pb-2">DESGLOSE DE MÉTODOS</h3>
-                     <table className="w-full"><tbody>{Object.entries(closingData.breakdown).map(([method, amount]) => (<tr key={method} className="border-b border-gray-200"><td className="py-1 capitalize">{method.replace('_', ' ')}</td><td className="py-1 text-right font-bold">${amount.toFixed(2)}</td></tr>))}</tbody></table>
+
+            <div className="mb-6 border rounded p-4 bg-gray-50">
+                <h3 className="font-bold text-lg mb-2 border-b border-gray-300">BALANCE GENERAL</h3>
+                <div className="grid grid-cols-2 gap-4 text-lg">
+                    <div>Base Inicial: <span className="font-bold">${Number(closingData.base).toFixed(2)}</span></div>
+                    <div>+ Ventas Totales: <span className="font-bold text-green-700">${closingData.sales.toFixed(2)}</span></div>
+                    <div>- Gastos Registrados: <span className="font-bold text-red-600">${closingData.expenses.toFixed(2)}</span></div>
+                    <div className="border-t border-black pt-2 font-bold text-xl">TOTAL EN CAJA: ${closingData.net.toFixed(2)}</div>
                 </div>
             </div>
-            <div className="mb-8 border rounded p-4">
-                 <h3 className="font-bold text-lg mb-4">ARQUEO DE CAJA FÍSICA (Dinero en Gaveta)</h3>
-                 <div className="flex justify-around text-center">
-                    <div className="p-4 bg-green-50 rounded border w-1/3"><div className="text-gray-500 text-sm">EFECTIVO USD</div><div className="text-3xl font-bold text-green-800">${closingData.cashInUsd.toFixed(2)}</div></div>
-                    <div className="p-4 bg-blue-50 rounded border w-1/3"><div className="text-gray-500 text-sm">EFECTIVO BOLÍVARES</div><div className="text-3xl font-bold text-blue-800">Bs {closingData.cashInBs.toFixed(2)}</div></div>
-                 </div>
+
+            <div className="mb-6">
+                <h3 className="font-bold text-lg mb-2 border-b">DESGLOSE DE MEDIOS DE PAGO</h3>
+                <table className="w-full text-sm border">
+                    <thead className="bg-gray-100"><tr><th className="p-2 text-left">Método</th><th className="p-2 text-right">Monto</th></tr></thead>
+                    <tbody>{Object.entries(closingData.breakdown).map(([m, v]) => (<tr key={m} className="border-b"><td className="p-2 uppercase">{m.replace('_', ' ')}</td><td className="p-2 text-right font-bold">${v.toFixed(2)}</td></tr>))}</tbody>
+                </table>
             </div>
-            <div className="mt-12 pt-12 border-t-2 border-black flex justify-between">
-                <div className="text-center w-64"><div className="border-b border-black mb-2"></div><p className="font-bold">Firma Gerencia</p></div>
-                <div className="text-center w-64"><div className="border-b border-black mb-2"></div><p className="font-bold">Firma Cajero/a</p></div>
+
+            <div className="mb-6 border-2 border-black p-4 rounded">
+                <h3 className="font-bold text-center text-xl mb-4">?? ARQUEO DE EFECTIVO (LO QUE DEBE HABER)</h3>
+                <div className="flex justify-around text-center">
+                    <div><div className="text-sm text-gray-500">EFECTIVO USD (Inc. Base)</div><div className="text-4xl font-bold">${closingData.cashInUsd.toFixed(2)}</div></div>
+                    <div><div className="text-sm text-gray-500">EFECTIVO BOLIVARES</div><div className="text-4xl font-bold">Bs {closingData.cashInBs.toFixed(2)}</div></div>
+                </div>
+            </div>
+            
+            <div className="mb-6 page-break">
+                <h3 className="font-bold text-lg mb-2 border-b">DETALLE DE ORDENES (MANAGER/CAJA)</h3>
+                <table className="w-full text-xs">
+                    <thead><tr><th>Hora</th><th>Mesa</th><th>Cajero</th><th>Monto</th></tr></thead>
+                    <tbody>{closingData.allPayments?.map((p, i) => (<tr key={i} className="border-b"><td>{new Date(p.created_at).toLocaleTimeString()}</td><td>Mesa...</td><td>{p.cashier || 'N/A'}</td><td className="text-right">${p.amount_usd.toFixed(2)}</td></tr>))}</tbody>
+                </table>
+            </div>
+
+            {user.role === 'owner' && (
+                <div className="mt-8 border-t-4 border-black pt-4">
+                    <h2 className="text-2xl font-bold mb-4 text-center">ANEXO CONFIDENCIAL (SOLO DUEÑO)</h2>
+                    <div className="grid grid-cols-2 gap-8">
+                        <div>
+                            <h4 className="font-bold border-b mb-2">Ranking de Productos Vendidos</h4>
+                            <table className="w-full text-xs">
+                                <thead><tr><th className="text-left">Producto</th><th className="text-right">Cant.</th></tr></thead>
+                                <tbody>{Object.entries(closingData.productCount).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold">{qty}</td></tr>))}</tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <h4 className="font-bold border-b mb-2">Consumo Teórico de Insumos</h4>
+                            <table className="w-full text-xs">
+                                <thead><tr><th className="text-left">Insumo</th><th className="text-right">Consumo Aprox</th></tr></thead>
+                                <tbody>{Object.entries(closingData.inventoryUsage).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold">{qty.toFixed(2)}</td></tr>))}</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            <div className="mt-12 flex justify-between text-center pt-8">
+                <div className="w-1/3 border-t border-black"><p>Firma Cajero Entrante</p></div>
+                <div className="w-1/3 border-t border-black"><p>Firma Cajero Saliente / Manager</p></div>
             </div>
         </div>
     )}
 
-    {/* ESTILOS EXTRAS PARA IMPRESION TICKET */}
-    <style>{`
-      #ticket-impresion { font-family: monospace; width: 80mm; padding: 5px; background: white; color: black; }
-      .ticket-centrado { text-align: center; }
-      .ticket-grande { font-size: 24px; font-weight: bold; }
-      .ticket-negrita { font-weight: bold; }
-      .ticket-linea { border-bottom: 1px dashed black; margin: 5px 0; }
-    `}</style>
+      <style>{`
+        @media print { .no-print { display: none !important; } .page-break { page-break-before: always; } }
+        #ticket-impresion { font-family: monospace; width: 80mm; padding: 5px; background: white; color: black; }
+        .ticket-centrado { text-align: center; }
+        .ticket-negrita { font-weight: bold; }
+        .ticket-linea { border-bottom: 1px dashed black; margin: 5px 0; }
+      `}</style>
     </div>
   );
 }
