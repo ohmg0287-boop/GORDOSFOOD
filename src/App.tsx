@@ -109,6 +109,7 @@ export default function DondeManoloApp() {
         setOrders([]); setExpenses([]);
     }
 
+    // Cargar personal solo si es Owner
     if (user && user.role === 'owner') {
         const s = await supabase.from('staff').select('*').order('name');
         if (s.data) setStaffList(s.data);
@@ -237,28 +238,15 @@ export default function DondeManoloApp() {
     } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
 
-  // --- NUEVA LÓGICA DE COBRO: EXTRAS Y VALIDACIONES ---
+  // --- COBROS: EXTRAS Y VALIDACIONES ---
   const handleAddExtraToOrder = async (type) => {
       const amount = prompt(`Monto del ${type} ($):`);
       if (!amount || isNaN(amount)) return;
-      
       setProcessing(true);
       try {
-          // 1. Agregar item a la orden (sin receta, no afecta stock)
-          await supabase.from('order_items').insert([{
-              order_id: selectedOrder.id,
-              product_name: type.toUpperCase(),
-              quantity: 1,
-              price_at_time: parseFloat(amount),
-              notes: 'CARGO ADICIONAL'
-          }]);
-          
-          // 2. Actualizar Total
-          await supabase.from('orders').update({ 
-              total_usd: selectedOrder.total_usd + parseFloat(amount) 
-          }).eq('id', selectedOrder.id);
-          
-          fetchOrders(); // Refrescar para ver el nuevo total
+          await supabase.from('order_items').insert([{ order_id: selectedOrder.id, product_name: type.toUpperCase(), quantity: 1, price_at_time: parseFloat(amount), notes: 'CARGO ADICIONAL' }]);
+          await supabase.from('orders').update({ total_usd: selectedOrder.total_usd + parseFloat(amount) }).eq('id', selectedOrder.id);
+          fetchOrders(); 
       } catch (e) { alert("Error al agregar extra: " + e.message); }
       finally { setProcessing(false); }
   };
@@ -266,14 +254,9 @@ export default function DondeManoloApp() {
   const handlePayment = async () => {
     if (!currentSession) return alert("Caja Cerrada");
     if (processing) return;
-    
-    // VALIDACION 1: No cerrar en cero
     if (selectedOrder.total_usd <= 0) return alert("No se pueden cerrar ordenes en monto 0. Si fue un error, elimine la orden.");
-
     const totalPaid = currentPayments.reduce((s, p) => s + p.amount_usd, 0);
-    // VALIDACION 2: Cobertura completa (con margen de error pequeño)
     if (selectedOrder.total_usd - totalPaid > 0.05) return alert("Falta cubrir el monto total.");
-    
     setProcessing(true); setLoading(true);
     try {
         const paymentsToSave = currentPayments.map(p => ({ order_id: selectedOrder.id, method: p.method, amount_usd: p.amount_usd, amount_bs: p.amount_bs, rate_used: tasa, cashier: user.name }));
@@ -285,42 +268,27 @@ export default function DondeManoloApp() {
 
   // --- BORRADO DE ORDENES (SOLO OWNER) ---
   const handleDeleteOrder = async (orderId) => {
-      if (user.role !== 'owner') return alert("Solo el Dueño puede eliminar ordenes completas.");
+      if (user.role !== 'owner') return alert("Solo el Dueño puede eliminar ordenes.");
       if (!confirm("PELIGRO: ¿Eliminar esta orden por completo? Se devolverá el inventario.")) return;
-      
       setLoading(true);
       try {
-          // 1. Obtener items para devolver stock
           const { data: items } = await supabase.from('order_items').select('*').eq('order_id', orderId);
-          
           if (items) {
               for (let item of items) {
                   const productRecipe = recipes[item.product_name];
                   if (productRecipe) {
                       for (let ingItem of productRecipe) {
                           const dbIng = ingredients.find(i => i.id === ingItem.ingredientId);
-                          if (dbIng) {
-                              // SUMAR al stock (devolución)
-                              await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + ingItem.quantity }).eq('id', dbIng.id);
-                          }
+                          if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + ingItem.quantity }).eq('id', dbIng.id);
                       }
                   }
               }
           }
-
-          // 2. Eliminar Pagos, Items y la Orden (Cascada manual por seguridad)
           await supabase.from('payments').delete().eq('order_id', orderId);
           await supabase.from('order_items').delete().eq('order_id', orderId);
           await supabase.from('orders').delete().eq('id', orderId);
-          
-          alert("Orden eliminada y stock restaurado.");
-          setSelectedOrder(null);
-          fetchOrders();
-      } catch (e) {
-          alert("Error eliminando orden: " + e.message);
-      } finally {
-          setLoading(false);
-      }
+          alert("Orden eliminada."); setSelectedOrder(null); fetchOrders();
+      } catch (e) { alert("Error: " + e.message); } finally { setLoading(false); }
   };
 
   const registerExpenseTransaction = async () => {
@@ -335,10 +303,39 @@ export default function DondeManoloApp() {
     setNewExpense({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' }); loadData(); setLoading(false);
   };
 
+  // --- GESTIÓN DE PERSONAL (ACTUALIZADO: ADD, DELETE, PIN) ---
+  const handleStaff = async (action, staffData) => {
+    if (user.role !== 'owner') return alert("Solo Dueño");
+    
+    if (action === 'add') {
+        const pin = prompt("Asignar PIN de acceso:");
+        if (!pin || !staffData.name || !staffData.role) return;
+        const { error } = await supabase.from('staff').insert([{ name: staffData.name, role: staffData.role, pin }]);
+        if (error) alert("Error: " + error.message);
+    } else if (action === 'delete') {
+        if (confirm("¿Eliminar a este empleado?")) await supabase.from('staff').delete().eq('id', staffData.id);
+    } else if (action === 'updatePin') {
+        const newPin = prompt(`Nuevo PIN para ${staffData.name}:`);
+        if (newPin) await supabase.from('staff').update({ pin: newPin }).eq('id', staffData.id);
+    }
+    loadData();
+  };
+
   // --- OTRAS FUNCIONES ---
   const handleAddIngredient = async () => { const n = prompt("Nombre:"); if(n) { const u = prompt("Unidad:"); await supabase.from('ingredients').insert([{ name:n, unit:u, stock: 0 }]); loadData(); }};
+  // NUEVO: Eliminar ingrediente
+  const handleDeleteIngredient = async (id) => {
+      if (user.role !== 'owner') return alert("Solo el dueño puede eliminar insumos.");
+      if (!confirm("⚠️ ¿Eliminar insumo? SE BORRARÁ DE TODAS LAS RECETAS.")) return;
+      setLoading(true);
+      const { error } = await supabase.from('ingredients').delete().eq('id', id);
+      if (error) alert("Error: " + error.message); else { alert("Eliminado."); loadData(); }
+      setLoading(false);
+  };
+
   const handleAddIngredientToRecipe = async () => { if (!selectedProductRecipe || !newRecipeEntry.ingredientId) return; setLoading(true); await supabase.from('recipes').insert([{ product_name: selectedProductRecipe, ingredient_id: newRecipeEntry.ingredientId, quantity: parseFloat(newRecipeEntry.quantity) }]); setNewRecipeEntry({ ingredientId: '', quantity: '' }); loadData(); setLoading(false); };
   const handleRemoveRecipeItem = async (id) => { if (confirm("¿Eliminar?")) { setLoading(true); await supabase.from('recipes').delete().eq('id', id); loadData(); setLoading(false); }};
+  
   const login = async (pin) => {
     const { data, error } = await supabase.from('staff').select('*').eq('pin', pin).maybeSingle();
     if (error || !data) { alert("PIN Incorrecto"); return; }
@@ -367,7 +364,6 @@ export default function DondeManoloApp() {
         fetchOrders();
       } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
-  const handleStaff = async (action, staffData) => { if (user.role !== 'owner') return; if (action === 'add') { const pin = prompt("PIN:"); if(pin) await supabase.from('staff').insert([{ name: staffData.name, role: staffData.role, pin }]); } else if (action === 'delete') { if(confirm("¿Borrar?")) await supabase.from('staff').delete().eq('id', staffData.id); } loadData(); };
   const addToCart = (product) => setCart(prev => [...prev, { ...product, tempId: Date.now() + Math.random() }]);
   const removeFromCart = (tempId) => setCart(prev => prev.filter(item => item.tempId !== tempId));
   const updateCartNote = (tempId, note) => setCart(prev => prev.map(item => item.tempId === tempId ? { ...item, notes: note } : item));
@@ -395,13 +391,13 @@ export default function DondeManoloApp() {
             </div>
         </div>
         <div className="flex gap-2">
-            {['owner', 'manager'].includes(user.role) && (
-                <>
-                <button onClick={() => setView('dashboard')} className={`p-2 rounded ${view==='dashboard'?'bg-yellow-600':'bg-gray-700'}`}><LayoutDashboard size={20}/></button>
-                <button onClick={() => setView('inventario')} className={`p-2 rounded ${view==='inventario'?'bg-yellow-600':'bg-gray-700'}`}><Package size={20}/></button>
-                <button onClick={() => setView('reportes')} className={`p-2 rounded ${view==='reportes'?'bg-yellow-600':'bg-gray-700'}`}><TrendingUp size={20}/></button>
-                </>
-            )}
+            {['owner', 'manager'].includes(user.role) && <button onClick={() => setView('dashboard')} className={`p-2 rounded ${view==='dashboard'?'bg-yellow-600':'bg-gray-700'}`}><LayoutDashboard size={20}/></button>}
+            
+            {/* CORRECCION 2: SOLO OWNER VE EL BOTON DE INVENTARIO */}
+            {user.role === 'owner' && <button onClick={() => setView('inventario')} className={`p-2 rounded ${view==='inventario'?'bg-yellow-600':'bg-gray-700'}`}><Package size={20}/></button>}
+            
+            {['owner', 'manager'].includes(user.role) && <button onClick={() => setView('reportes')} className={`p-2 rounded ${view==='reportes'?'bg-yellow-600':'bg-gray-700'}`}><TrendingUp size={20}/></button>}
+            
             <button onClick={() => setView('caja')} className={`p-2 rounded flex items-center gap-2 ${view==='caja'?'bg-yellow-600':'bg-gray-700'}`}><DollarSign size={20}/></button>
             {user.role !== 'cocina' && <button onClick={() => setView('pedidos')} className={`p-2 rounded ${view==='pedidos'?'bg-yellow-600':'bg-gray-700'}`}><ShoppingCart size={20}/></button>}
             <button onClick={() => window.location.reload()} className="p-2 bg-red-600 rounded"><LogOut size={20}/></button>
@@ -428,6 +424,7 @@ export default function DondeManoloApp() {
                   <h2 className="text-xl font-bold text-gray-700">Tasa del día: <span className="text-green-600">1 USD = {tasa} Bs</span></h2>
                   <div className="flex gap-2"><input type="number" value={tasa} onChange={e => setTasa(e.target.value)} className="border p-2 rounded w-24" /><button onClick={async () => { await supabase.from('settings').upsert({ key:'tasa', value: { usd: tasa }}); alert("Guardado"); }} className="bg-blue-600 text-white p-2 rounded"><Save/></button></div>
               </div>
+              
               {user.role === 'owner' && (
                   <div className="bg-white p-6 rounded-lg shadow-md">
                       <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingDown className="text-red-500"/> Registrar Gasto</h3>
@@ -435,6 +432,27 @@ export default function DondeManoloApp() {
                           <input placeholder="Descripción" className="border p-2 rounded w-full" value={newExpense.desc} onChange={e => setNewExpense({...newExpense, desc: e.target.value})} />
                           <div className="flex gap-2"><input type="number" placeholder="Monto ($)" className="border p-2 rounded w-full" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} /><select className="border p-2 rounded" value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>Nomina</option><option>Servicios</option><option>Otros</option></select></div>
                           <button onClick={registerExpenseTransaction} disabled={!currentSession} className="md:col-span-2 bg-red-600 text-white py-2 rounded font-bold disabled:opacity-50">Registrar Salida</button>
+                      </div>
+                  </div>
+              )}
+
+              {/* CORRECCION 1: GESTIÓN DE PERSONAL RESTAURADA Y MEJORADA */}
+              {user.role === 'owner' && (
+                  <div className="bg-white p-6 rounded-lg shadow-md mt-6">
+                      <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-bold text-lg flex items-center gap-2"><Users/> Gestión de Personal</h3>
+                          <button onClick={() => handleStaff('add', { name: prompt("Nombre:"), role: prompt("Rol (owner, manager, caja, mesero, cocina):") })} className="bg-green-600 text-white px-3 py-1 rounded flex items-center gap-1 text-sm"><PlusCircle size={16}/> Nuevo</button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                          {staffList.map(s => (
+                              <div key={s.id} className="border p-3 rounded flex justify-between items-center bg-gray-50">
+                                  <div><div className="font-bold">{s.name}</div><div className="text-xs text-gray-500 uppercase">{s.role}</div></div>
+                                  <div className="flex gap-2">
+                                      <button onClick={() => handleStaff('updatePin', s)} className="text-blue-500 hover:bg-blue-100 p-1 rounded font-bold text-xs" title="Cambiar PIN">PIN</button>
+                                      <button onClick={() => handleStaff('delete', s)} className="text-red-500 hover:bg-red-100 p-1 rounded" title="Eliminar"><Trash2 size={16}/></button>
+                                  </div>
+                              </div>
+                          ))}
                       </div>
                   </div>
               )}
@@ -465,7 +483,23 @@ export default function DondeManoloApp() {
                 {invSubView === 'insumos' ? (
                     <div className="overflow-x-auto">
                         <div className="mb-4 flex justify-end"><button onClick={handleAddIngredient} className="bg-green-600 text-white px-3 py-1 rounded text-sm">+ Nuevo</button></div>
-                        <table className="w-full text-left"><thead><tr className="bg-gray-100"><th className="p-2">Item</th><th className="p-2">Stock</th><th className="p-2">Und</th>{user.role === 'owner' && <th className="p-2 no-print">Edit</th>}</tr></thead><tbody>{ingredients.map(ing => (<tr key={ing.id} className="border-b"><td className="p-2">{ing.name}</td><td className={`p-2 font-bold ${ing.stock < 10 ? 'text-red-600' : 'text-gray-800'}`}>{Number(ing.stock).toFixed(2)}</td><td className="p-2 text-sm">{ing.unit}</td>{user.role === 'owner' && <td className="p-2 no-print"><button onClick={async () => { const v = prompt("Stock:", ing.stock); if(v) { await supabase.from('ingredients').update({stock:v}).eq('id', ing.id); loadData(); }}} className="text-blue-600"><Edit3 size={16}/></button></td>}</tr>))}</tbody></table>
+                        <table className="w-full text-left">
+                            <thead><tr className="bg-gray-100"><th className="p-2">Item</th><th className="p-2">Stock</th><th className="p-2">Und</th>{user.role === 'owner' && <th className="p-2 no-print">Acciones</th>}</tr></thead>
+                            <tbody>{ingredients.map(ing => (
+                                <tr key={ing.id} className="border-b hover:bg-gray-50">
+                                    <td className="p-2">{ing.name}</td>
+                                    <td className={`p-2 font-bold ${ing.stock < 10 ? 'text-red-600' : 'text-gray-800'}`}>{Number(ing.stock).toFixed(2)}</td>
+                                    <td className="p-2 text-sm">{ing.unit}</td>
+                                    {user.role === 'owner' && (
+                                        <td className="p-2 no-print flex gap-2">
+                                            <button onClick={async () => { const v = prompt("Stock:", ing.stock); if(v) { await supabase.from('ingredients').update({stock:v}).eq('id', ing.id); loadData(); }}} className="text-blue-600 hover:bg-blue-50 p-1 rounded" title="Editar Stock"><Edit3 size={16}/></button>
+                                            {/* CORRECCION 3: BOTÓN BORRAR INSUMO */}
+                                            <button onClick={() => handleDeleteIngredient(ing.id)} className="text-red-500 hover:bg-red-50 p-1 rounded" title="Eliminar Insumo"><Trash2 size={16}/></button>
+                                        </td>
+                                    )}
+                                </tr>
+                            ))}</tbody>
+                        </table>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -528,9 +562,7 @@ export default function DondeManoloApp() {
                           <div><div className="font-bold text-lg">{o.service_type} - {o.info}</div><span className={`text-xs px-2 py-1 rounded ${o.status==='listo'?'bg-green-200 text-green-800':'bg-yellow-100 text-yellow-800'}`}>{o.status.toUpperCase()}</span></div>
                           <div className="flex items-center gap-2">
                               <div className="text-right"><div className="font-bold text-xl">${o.total_usd.toFixed(2)}</div></div>
-                              {/* BOTÓN REIMPRIMIR TICKET */}
                               <button onClick={(e) => { e.stopPropagation(); setTicketType('full'); setLastOrderTicket(o); setTimeout(()=>window.print(), 200); }} className="bg-gray-200 p-2 rounded hover:bg-gray-300"><Printer size={16}/></button>
-                              {/* BOTÓN ELIMINAR (SOLO OWNER) */}
                               {user.role === 'owner' && <button onClick={(e) => { e.stopPropagation(); handleDeleteOrder(o.id); }} className="bg-red-100 text-red-600 p-2 rounded hover:bg-red-200"><Trash2 size={16}/></button>}
                           </div>
                       </div>
@@ -548,8 +580,6 @@ export default function DondeManoloApp() {
                                   <div className="text-gray-500 text-sm">TOTAL A PAGAR</div>
                                   <div className="text-4xl font-bold text-blue-900">${selectedOrder.total_usd.toFixed(2)}</div>
                               </div>
-                              
-                              {/* MONITOR DE PAGO (RESTANTE) */}
                               <div className="mb-6 p-4 rounded border-2 text-center bg-white shadow-inner">
                                   {(() => {
                                       const paid = currentPayments.reduce((s, p) => s + p.amount_usd, 0);
@@ -567,13 +597,10 @@ export default function DondeManoloApp() {
                                       );
                                   })()}
                               </div>
-
-                              {/* EXTRAS (DELIVERY Y PROPINA) */}
                               <div className="mb-4 flex gap-2 justify-center">
                                   <button onClick={() => handleAddExtraToOrder('delivery')} className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-sm font-bold flex items-center gap-1 hover:bg-purple-200"><Bike size={16}/> + DELIVERY</button>
                                   <button onClick={() => handleAddExtraToOrder('propina')} className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded text-sm font-bold flex items-center gap-1 hover:bg-yellow-200"><Coins size={16}/> + PROPINA</button>
                               </div>
-
                               <div className="mb-6"><div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option>{['owner', 'manager'].includes(user.role) && (<><option value="obsequio">?? OBSEQUIO / CORTESÍA</option><option value="personal">????? CONSUMO PERSONAL</option></>)}</select></div><button disabled={processing || !currentSession} onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">Agregar Pago</button></div>
                               <div className="space-y-2 mb-6">{currentPayments.map((p, i) => (<div key={i} className="flex justify-between border-b pb-1 text-sm items-center"><span>{p.method}</span><div className="flex items-center gap-2"><span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span><button onClick={() => {const newP = [...currentPayments]; newP.splice(i, 1); setCurrentPayments(newP);}} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16}/></button></div></div>))}</div>
                               <div className="border-t pt-4"><button onClick={handlePayment} disabled={processing || !currentSession} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700 disabled:opacity-50 disabled:bg-gray-400">{!currentSession ? 'CAJA CERRADA' : 'FINALIZAR VENTA'}</button></div>
