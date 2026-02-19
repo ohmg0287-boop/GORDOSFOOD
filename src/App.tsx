@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { ShoppingCart, LayoutDashboard, DollarSign, Users, Package, Trash2, Printer, LogOut, Edit3, TrendingDown, TrendingUp, PlusCircle, Save, FileText, Search, XCircle, AlertTriangle, Database, BookOpen, Lock, Unlock, Calendar, Eye, Bike, Coins } from 'lucide-react';
 
@@ -51,16 +51,28 @@ export default function DondeManoloApp() {
   // Gastos
   const [newExpense, setNewExpense] = useState({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' });
 
-  // Auto-refresco
+  // --- SOLUCIÓN DEL BUG DE SINCRONIZACIÓN (STALE CLOSURE) ---
+  const fetchOrdersRef = useRef();
+
+  // Mantenemos la referencia siempre actualizada con la versión más reciente del sistema
+  useEffect(() => {
+      fetchOrdersRef.current = fetchOrders;
+  });
+
+  // Auto-refresco corregido
   useEffect(() => {
     if (user) {
       loadData();
       if (['cocina', 'caja', 'owner', 'manager', 'mesero'].includes(user.role)) {
-        const i = setInterval(fetchOrders, 5000); 
+        // En lugar de llamar a la función vieja, llamamos siempre a la versión más reciente
+        const i = setInterval(() => {
+            if (fetchOrdersRef.current) fetchOrdersRef.current();
+        }, 5000); 
         return () => clearInterval(i);
       }
     }
   }, [user]);
+  // ---------------------------------------------------------
 
   // Cargar Historial al entrar a Reportes
   useEffect(() => {
