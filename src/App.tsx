@@ -53,18 +53,14 @@ export default function DondeManoloApp() {
 
   // --- SOLUCIÓN DEL BUG DE SINCRONIZACIÓN (STALE CLOSURE) ---
   const fetchOrdersRef = useRef();
-
-  // Mantenemos la referencia siempre actualizada con la versión más reciente del sistema
   useEffect(() => {
       fetchOrdersRef.current = fetchOrders;
   });
 
-  // Auto-refresco corregido
   useEffect(() => {
     if (user) {
       loadData();
       if (['cocina', 'caja', 'owner', 'manager', 'mesero'].includes(user.role)) {
-        // En lugar de llamar a la función vieja, llamamos siempre a la versión más reciente
         const i = setInterval(() => {
             if (fetchOrdersRef.current) fetchOrdersRef.current();
         }, 5000); 
@@ -74,7 +70,6 @@ export default function DondeManoloApp() {
   }, [user]);
   // ---------------------------------------------------------
 
-  // Cargar Historial al entrar a Reportes
   useEffect(() => {
       if (view === 'reportes') loadHistory();
   }, [view]);
@@ -121,7 +116,6 @@ export default function DondeManoloApp() {
         setOrders([]); setExpenses([]);
     }
 
-    // Cargar personal solo si es Owner
     if (user && user.role === 'owner') {
         const s = await supabase.from('staff').select('*').order('name');
         if (s.data) setStaffList(s.data);
@@ -212,7 +206,6 @@ export default function DondeManoloApp() {
           expenses: expensesTotal,
           net: totalSales - expensesTotal,
           breakdown, cashInUsd, cashInBs, productCount, inventoryUsage, 
-          // Anexamos info del cliente a cada pago para el reporte
           allPayments: allPayments.map(p => {
               const ord = sessionOrders.find(o => o.id === p.order_id);
               return { ...p, client_info: ord ? ord.info : '?' };
@@ -231,7 +224,7 @@ export default function DondeManoloApp() {
       setCurrentSession(null);
   };
 
-  // --- LOGICA NEGOCIO ---
+  // --- LOGICA NEGOCIO (CORREGIDA: DESCUENTO ATÓMICO) ---
   const sendOrder = async () => {
     if (!currentSession) return alert("?? CAJA CERRADA");
     if (processing || cart.length === 0 || !serviceInfo.val) return alert("Falta info");
@@ -242,15 +235,28 @@ export default function DondeManoloApp() {
         if (error) throw error;
         const items = cart.map(i => ({ order_id: order.id, product_name: i.name, quantity: 1, price_at_time: i.price_usd, notes: i.notes || '' }));
         await supabase.from('order_items').insert(items);
+        
+        // CORRECCIÓN: Agrupar insumos de todo el carrito y consultar stock real en BD
+        const inventoryUsage = {};
         for (let item of cart) {
-          const productRecipe = recipes[item.name]; 
-          if (productRecipe) { for (let ingItem of productRecipe) { const dbIng = ingredients.find(i => i.id === ingItem.ingredientId); if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - ingItem.quantity }).eq('id', dbIng.id); } }
+            const productRecipe = recipes[item.name]; 
+            if (productRecipe) { 
+                for (let ingItem of productRecipe) { 
+                    inventoryUsage[ingItem.ingredientId] = (inventoryUsage[ingItem.ingredientId] || 0) + ingItem.quantity;
+                } 
+            }
         }
+        for (const [ingId, qtyDeduct] of Object.entries(inventoryUsage)) {
+            const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingId).single();
+            if (freshData) {
+                await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) - qtyDeduct }).eq('id', ingId);
+            }
+        }
+
         setTicketType('full'); setLastOrderTicket({ ...order, items: items }); setCart([]); setServiceInfo({ type: 'Mesa', val: '' }); loadData();
     } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
 
-  // --- COBROS: EXTRAS Y VALIDACIONES ---
   const handleAddExtraToOrder = async (type) => {
       const amount = prompt(`Monto del ${type} ($):`);
       if (!amount || isNaN(amount)) return;
@@ -266,7 +272,7 @@ export default function DondeManoloApp() {
   const handlePayment = async () => {
     if (!currentSession) return alert("Caja Cerrada");
     if (processing) return;
-    if (selectedOrder.total_usd <= 0) return alert("No se pueden cerrar ordenes en monto 0. Si fue un error, elimine la orden.");
+    if (selectedOrder.total_usd <= 0) return alert("No se pueden cerrar ordenes en monto 0.");
     const totalPaid = currentPayments.reduce((s, p) => s + p.amount_usd, 0);
     if (selectedOrder.total_usd - totalPaid > 0.05) return alert("Falta cubrir el monto total.");
     setProcessing(true); setLoading(true);
@@ -278,21 +284,28 @@ export default function DondeManoloApp() {
     } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
 
-  // --- BORRADO DE ORDENES (SOLO OWNER) ---
   const handleDeleteOrder = async (orderId) => {
       if (user.role !== 'owner') return alert("Solo el Dueño puede eliminar ordenes.");
-      if (!confirm("PELIGRO: ¿Eliminar esta orden por completo? Se devolverá el inventario.")) return;
+      if (!confirm("PELIGRO: ¿Eliminar esta orden? Se devolverá el inventario.")) return;
       setLoading(true);
       try {
           const { data: items } = await supabase.from('order_items').select('*').eq('order_id', orderId);
           if (items) {
+              // Agrupamos todo lo que se va a devolver
+              const inventoryToReturn = {};
               for (let item of items) {
                   const productRecipe = recipes[item.product_name];
                   if (productRecipe) {
                       for (let ingItem of productRecipe) {
-                          const dbIng = ingredients.find(i => i.id === ingItem.ingredientId);
-                          if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + ingItem.quantity }).eq('id', dbIng.id);
+                          inventoryToReturn[ingItem.ingredientId] = (inventoryToReturn[ingItem.ingredientId] || 0) + ingItem.quantity;
                       }
+                  }
+              }
+              // Devolvemos el stock consultando el monto en vivo
+              for (const [ingId, qtyReturn] of Object.entries(inventoryToReturn)) {
+                  const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingId).single();
+                  if (freshData) {
+                      await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) + qtyReturn }).eq('id', ingId);
                   }
               }
           }
@@ -309,16 +322,17 @@ export default function DondeManoloApp() {
     setLoading(true);
     await supabase.from('expenses').insert([{ description: newExpense.desc, amount: parseFloat(newExpense.amount), category: newExpense.isStock ? 'Compra Inventario' : newExpense.category, registered_by: user.name, session_id: currentSession.id }]);
     if (newExpense.isStock && newExpense.ingredientId && newExpense.quantity) {
-        const ing = ingredients.find(i => i.id === newExpense.ingredientId);
-        if (ing) await supabase.from('ingredients').update({ stock: parseFloat(ing.stock) + parseFloat(newExpense.quantity) }).eq('id', ing.id);
+        // Corrección de seguridad al recargar inventario
+        const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', newExpense.ingredientId).single();
+        if (freshData) {
+            await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) + parseFloat(newExpense.quantity) }).eq('id', newExpense.ingredientId);
+        }
     }
     setNewExpense({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' }); loadData(); setLoading(false);
   };
 
-  // --- GESTIÓN DE PERSONAL (ACTUALIZADO: ADD, DELETE, PIN) ---
   const handleStaff = async (action, staffData) => {
     if (user.role !== 'owner') return alert("Solo Dueño");
-    
     if (action === 'add') {
         const pin = prompt("Asignar PIN de acceso:");
         if (!pin || !staffData.name || !staffData.role) return;
@@ -333,9 +347,7 @@ export default function DondeManoloApp() {
     loadData();
   };
 
-  // --- OTRAS FUNCIONES ---
   const handleAddIngredient = async () => { const n = prompt("Nombre:"); if(n) { const u = prompt("Unidad:"); await supabase.from('ingredients').insert([{ name:n, unit:u, stock: 0 }]); loadData(); }};
-  // NUEVO: Eliminar ingrediente
   const handleDeleteIngredient = async (id) => {
       if (user.role !== 'owner') return alert("Solo el dueño puede eliminar insumos.");
       if (!confirm("⚠️ ¿Eliminar insumo? SE BORRARÁ DE TODAS LAS RECETAS.")) return;
@@ -354,28 +366,49 @@ export default function DondeManoloApp() {
     setUser(data);
     if (['owner', 'manager'].includes(data.role)) setView('dashboard'); else if (data.role === 'caja') setView('caja'); else if (data.role === 'mesero') setView('pedidos'); else if (data.role === 'cocina') setView('cocina');
   };
+
   const handleAddItemToOrder = async (product) => { 
       if (!selectedOrder || processing) return; if (!confirm(`¿Agregar ${product.name}?`)) return;
       setProcessing(true); setLoading(true);
       try {
           await supabase.from('order_items').insert([{ order_id: selectedOrder.id, product_name: product.name, quantity: 1, price_at_time: product.price_usd, notes: 'ANEXO' }]);
           await supabase.from('orders').update({ total_usd: selectedOrder.total_usd + product.price_usd, status: 'pendiente' }).eq('id', selectedOrder.id);
+          
           const productRecipe = recipes[product.name];
-          if (productRecipe) { for (let ingItem of productRecipe) { const dbIng = ingredients.find(i => i.id === ingItem.ingredientId); if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) - ingItem.quantity }).eq('id', dbIng.id); } }
+          if (productRecipe) { 
+              for (let ingItem of productRecipe) { 
+                  // Lectura en vivo antes de descontar
+                  const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingItem.ingredientId).single();
+                  if (freshData) {
+                      await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) - ingItem.quantity }).eq('id', ingItem.ingredientId); 
+                  }
+              } 
+          }
           alert("Agregado"); if(confirm("¿Imprimir Ticket?")) { setTicketType('anexo'); setLastOrderTicket({ ...selectedOrder, items: [{ product_name: product.name, quantity: 1, notes: 'ANEXO' }] }); setTimeout(() => window.print(), 500); }
           fetchOrders();
       } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
+
   const handleRemoveItemFromOrder = async (item) => { 
       if (processing || !confirm(`¿Eliminar ${item.product_name}?`)) return; setProcessing(true); setLoading(true);
       try {
         await supabase.from('order_items').delete().eq('id', item.id);
         await supabase.from('orders').update({ total_usd: Math.max(0, selectedOrder.total_usd - item.price_at_time) }).eq('id', selectedOrder.id);
+        
         const productRecipe = recipes[item.product_name];
-        if (productRecipe) { for (let ingItem of productRecipe) { const dbIng = ingredients.find(i => i.id === ingItem.ingredientId); if (dbIng) await supabase.from('ingredients').update({ stock: parseFloat(dbIng.stock) + ingItem.quantity }).eq('id', dbIng.id); } }
+        if (productRecipe) { 
+            for (let ingItem of productRecipe) { 
+                // Lectura en vivo antes de devolver al inventario
+                const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingItem.ingredientId).single();
+                if (freshData) {
+                    await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) + ingItem.quantity }).eq('id', ingItem.ingredientId); 
+                }
+            } 
+        }
         fetchOrders();
       } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
+
   const addToCart = (product) => setCart(prev => [...prev, { ...product, tempId: Date.now() + Math.random() }]);
   const removeFromCart = (tempId) => setCart(prev => prev.filter(item => item.tempId !== tempId));
   const updateCartNote = (tempId, note) => setCart(prev => prev.map(item => item.tempId === tempId ? { ...item, notes: note } : item));
@@ -386,9 +419,9 @@ export default function DondeManoloApp() {
       <h1 className="text-4xl font-bold mb-8 text-yellow-500">DONDE MANOLO</h1>
       <div className="grid grid-cols-2 gap-6 w-full max-w-md px-4">
         {['DUEÑO', 'GERENCIA', 'CAJA', 'MESERO'].map((role, idx) => (
-          <button key={role} onClick={() => { const p = prompt(`PIN ${role}:`); if(p) login(p); }} className={`p-6 rounded-xl text-lg font-bold shadow-lg transform hover:scale-105 transition ${idx===0?'bg-yellow-600':idx===1?'bg-blue-600':idx===2?'bg-green-600':'bg-purple-600'}`}>?? {role}</button>
+          <button key={role} onClick={() => { const p = prompt(`PIN ${role}:`); if(p) login(p); }} className={`p-6 rounded-xl text-lg font-bold shadow-lg transform hover:scale-105 transition ${idx===0?'bg-yellow-600':idx===1?'bg-blue-600':idx===2?'bg-green-600':'bg-purple-600'}`}>🥩 {role}</button>
         ))}
-        <button onClick={() => { const p = prompt("PIN Cocina:"); if(p) login(p); }} className="col-span-2 p-4 bg-gray-700 rounded-xl font-bold border border-gray-500">?? COCINA</button>
+        <button onClick={() => { const p = prompt("PIN Cocina:"); if(p) login(p); }} className="col-span-2 p-4 bg-gray-700 rounded-xl font-bold border border-gray-500">🍔 COCINA</button>
       </div>
     </div>
   );
@@ -405,7 +438,6 @@ export default function DondeManoloApp() {
         <div className="flex gap-2">
             {['owner', 'manager'].includes(user.role) && <button onClick={() => setView('dashboard')} className={`p-2 rounded ${view==='dashboard'?'bg-yellow-600':'bg-gray-700'}`}><LayoutDashboard size={20}/></button>}
             
-            {/* CORRECCION 2: SOLO OWNER VE EL BOTON DE INVENTARIO */}
             {user.role === 'owner' && <button onClick={() => setView('inventario')} className={`p-2 rounded ${view==='inventario'?'bg-yellow-600':'bg-gray-700'}`}><Package size={20}/></button>}
             
             {['owner', 'manager'].includes(user.role) && <button onClick={() => setView('reportes')} className={`p-2 rounded ${view==='reportes'?'bg-yellow-600':'bg-gray-700'}`}><TrendingUp size={20}/></button>}
@@ -448,7 +480,6 @@ export default function DondeManoloApp() {
                   </div>
               )}
 
-              {/* CORRECCION 1: GESTIÓN DE PERSONAL RESTAURADA Y MEJORADA */}
               {user.role === 'owner' && (
                   <div className="bg-white p-6 rounded-lg shadow-md mt-6">
                       <div className="flex justify-between items-center mb-4">
@@ -505,7 +536,6 @@ export default function DondeManoloApp() {
                                     {user.role === 'owner' && (
                                         <td className="p-2 no-print flex gap-2">
                                             <button onClick={async () => { const v = prompt("Stock:", ing.stock); if(v) { await supabase.from('ingredients').update({stock:v}).eq('id', ing.id); loadData(); }}} className="text-blue-600 hover:bg-blue-50 p-1 rounded" title="Editar Stock"><Edit3 size={16}/></button>
-                                            {/* CORRECCION 3: BOTÓN BORRAR INSUMO */}
                                             <button onClick={() => handleDeleteIngredient(ing.id)} className="text-red-500 hover:bg-red-50 p-1 rounded" title="Eliminar Insumo"><Trash2 size={16}/></button>
                                         </td>
                                     )}
