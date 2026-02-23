@@ -109,7 +109,7 @@ export default function DondeManoloApp() {
     // 4. Datos de Sesión Actual
     if (sessionData) {
         const o = await supabase.from('orders').select('*, order_items(*), payments(*)').eq('session_id', sessionData.id).order('created_at', { ascending: false });
-        const e = await supabase.from('expenses').select('*').eq('session_id', sessionData.id).order('date', { ascending: false });
+        const e = await supabase.from('expenses').select('*').eq('session_id', sessionData.id).order('created_at', { ascending: false });
         if (o.data) setOrders(o.data);
         if (e.data) setExpenses(e.data);
     } else {
@@ -206,9 +206,10 @@ export default function DondeManoloApp() {
           expenses: expensesTotal,
           net: totalSales - expensesTotal,
           breakdown, cashInUsd, cashInBs, productCount, inventoryUsage, 
+          sessionExpenses, // PASAMOS LOS GASTOS AL REPORTE
           allPayments: allPayments.map(p => {
               const ord = sessionOrders.find(o => o.id === p.order_id);
-              return { ...p, client_info: ord ? ord.info : '?' };
+              return { ...p, client_info: ord ? ord.info : '?', created_by: ord ? ord.created_by : '?' };
           })
       };
       
@@ -319,8 +320,17 @@ export default function DondeManoloApp() {
   const registerExpenseTransaction = async () => {
     if (!currentSession) return alert("Caja Cerrada");
     if (!newExpense.desc || !newExpense.amount) return alert("Faltan datos");
+    if (newExpense.isStock && (!newExpense.ingredientId || !newExpense.quantity)) return alert("Falta seleccionar el insumo o la cantidad.");
+    
     setLoading(true);
-    await supabase.from('expenses').insert([{ description: newExpense.desc, amount: parseFloat(newExpense.amount), category: newExpense.isStock ? 'Compra Inventario' : newExpense.category, registered_by: user.name, session_id: currentSession.id }]);
+    await supabase.from('expenses').insert([{ 
+        description: newExpense.desc, 
+        amount: parseFloat(newExpense.amount), 
+        category: newExpense.isStock ? 'Compra Inventario' : newExpense.category, 
+        registered_by: user.name, 
+        session_id: currentSession.id 
+    }]);
+    
     if (newExpense.isStock && newExpense.ingredientId && newExpense.quantity) {
         // Corrección de seguridad al recargar inventario
         const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', newExpense.ingredientId).single();
@@ -472,10 +482,34 @@ export default function DondeManoloApp() {
               {user.role === 'owner' && (
                   <div className="bg-white p-6 rounded-lg shadow-md">
                       <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingDown className="text-red-500"/> Registrar Gasto</h3>
+                      
+                      {/* INTERFAZ MEJORADA PARA GASTOS E INVENTARIO */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded">
-                          <input placeholder="Descripción" className="border p-2 rounded w-full" value={newExpense.desc} onChange={e => setNewExpense({...newExpense, desc: e.target.value})} />
-                          <div className="flex gap-2"><input type="number" placeholder="Monto ($)" className="border p-2 rounded w-full" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} /><select className="border p-2 rounded" value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}><option>Nomina</option><option>Servicios</option><option>Otros</option></select></div>
-                          <button onClick={registerExpenseTransaction} disabled={!currentSession} className="md:col-span-2 bg-red-600 text-white py-2 rounded font-bold disabled:opacity-50">Registrar Salida</button>
+                          <input placeholder="Descripción del Gasto (Ej. Compra Pan, Nómina José...)" className="border p-2 rounded w-full" value={newExpense.desc} onChange={e => setNewExpense({...newExpense, desc: e.target.value})} />
+                          <div className="flex gap-2">
+                              <input type="number" placeholder="Monto ($)" className="border p-2 rounded w-full" value={newExpense.amount} onChange={e => setNewExpense({...newExpense, amount: e.target.value})} />
+                              <select className="border p-2 rounded bg-white" value={newExpense.category} onChange={e => setNewExpense({...newExpense, category: e.target.value})}>
+                                  <option>Nomina</option><option>Servicios</option><option>Otros</option><option value="Compra Inventario">Compra Inventario</option>
+                              </select>
+                          </div>
+                          
+                          <div className="md:col-span-2 flex flex-wrap items-center gap-4 bg-white p-3 rounded border border-gray-200 shadow-sm">
+                              <label className="flex items-center gap-2 font-bold text-sm text-gray-700 cursor-pointer">
+                                  <input type="checkbox" checked={newExpense.isStock} onChange={e => setNewExpense({...newExpense, isStock: e.target.checked})} className="w-5 h-5 accent-blue-600" />
+                                  ¿Es compra de insumo para el Inventario?
+                              </label>
+                              {newExpense.isStock && (
+                                  <div className="flex gap-2 flex-1 min-w-[250px]">
+                                      <select className="border p-2 rounded flex-1 bg-white" value={newExpense.ingredientId} onChange={e => setNewExpense({...newExpense, ingredientId: e.target.value})}>
+                                          <option value="">Seleccione el insumo...</option>
+                                          {ingredients.map(i => <option key={i.id} value={i.id}>{i.name} ({i.unit})</option>)}
+                                      </select>
+                                      <input type="number" placeholder="Cantidad" className="border p-2 rounded w-28" value={newExpense.quantity} onChange={e => setNewExpense({...newExpense, quantity: e.target.value})} />
+                                  </div>
+                              )}
+                          </div>
+
+                          <button onClick={registerExpenseTransaction} disabled={!currentSession} className="md:col-span-2 bg-red-600 text-white py-3 rounded font-bold shadow-md hover:bg-red-700 disabled:opacity-50 mt-2">Registrar Salida de Dinero</button>
                       </div>
                   </div>
               )}
@@ -709,6 +743,33 @@ export default function DondeManoloApp() {
                 </div>
             </div>
 
+            {/* NUEVA SECCIÓN DE GASTOS DETALLADOS */}
+            {closingData.sessionExpenses && closingData.sessionExpenses.length > 0 && (
+                <div className="mb-6">
+                    <h3 className="font-bold text-lg mb-2 border-b">DETALLE DE GASTOS / SALIDAS</h3>
+                    <table className="w-full text-xs border">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th className="p-2 text-left">Hora</th>
+                                <th className="p-2 text-left">Descripción</th>
+                                <th className="p-2 text-left">Categoría</th>
+                                <th className="p-2 text-right">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {closingData.sessionExpenses.map(e => (
+                                <tr key={e.id} className="border-b">
+                                    <td className="p-2">{new Date(e.created_at || e.date).toLocaleTimeString()}</td>
+                                    <td className="p-2 font-bold">{e.description}</td>
+                                    <td className="p-2 uppercase">{e.category}</td>
+                                    <td className="p-2 text-right text-red-600 font-bold">${e.amount.toFixed(2)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
             <div className="mb-6">
                 <h3 className="font-bold text-lg mb-2 border-b">DESGLOSE DE MEDIOS DE PAGO</h3>
                 <table className="w-full text-sm border">
@@ -726,10 +787,29 @@ export default function DondeManoloApp() {
             </div>
             
             <div className="mb-6 page-break">
+                {/* TABLA DE ÓRDENES ACTUALIZADA CON COLUMNA DE MESERO */}
                 <h3 className="font-bold text-lg mb-2 border-b">DETALLE DE ORDENES (MANAGER/CAJA)</h3>
                 <table className="w-full text-xs">
-                    <thead><tr><th>Hora</th><th>Mesa / Cliente</th><th>Cajero</th><th>Monto</th></tr></thead>
-                    <tbody>{closingData.allPayments?.map((p, i) => (<tr key={i} className="border-b"><td>{new Date(p.created_at).toLocaleTimeString()}</td><td className="font-bold">{p.client_info}</td><td>{p.cashier || 'N/A'}</td><td className="text-right">${p.amount_usd.toFixed(2)}</td></tr>))}</tbody>
+                    <thead>
+                        <tr>
+                            <th className="text-left">Hora</th>
+                            <th className="text-left">Mesa / Cliente</th>
+                            <th className="text-left">Mesero (Tomó Pedido)</th>
+                            <th className="text-left">Cajero (Cobró)</th>
+                            <th className="text-right">Monto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {closingData.allPayments?.map((p, i) => (
+                            <tr key={i} className="border-b">
+                                <td>{new Date(p.created_at).toLocaleTimeString()}</td>
+                                <td className="font-bold">{p.client_info}</td>
+                                <td>{p.created_by || 'N/A'}</td>
+                                <td>{p.cashier || 'N/A'}</td>
+                                <td className="text-right">${p.amount_usd.toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
                 </table>
             </div>
 
