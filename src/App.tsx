@@ -883,6 +883,7 @@ export default function DondeManoloApp() {
             </div>
             
             <div className="mb-6 page-break">
+                {/* TABLA DE ÓRDENES CON MÉTODO DE PAGO */}
                 <h3 className="font-bold text-lg mb-2 border-b">DETALLE DE ORDENES (MANAGER/CAJA)</h3>
                 <table className="w-full text-xs">
                     <thead>
@@ -891,6 +892,7 @@ export default function DondeManoloApp() {
                             <th className="text-left">Mesa / Cliente</th>
                             <th className="text-left">Mesero (Tomó Pedido)</th>
                             <th className="text-left">Cajero (Cobró)</th>
+                            <th className="text-left">Método de Pago</th>
                             <th className="text-right">Monto</th>
                         </tr>
                     </thead>
@@ -901,6 +903,7 @@ export default function DondeManoloApp() {
                                 <td className="font-bold">{p.client_info}</td>
                                 <td>{p.created_by || 'N/A'}</td>
                                 <td>{p.cashier || 'N/A'}</td>
+                                <td className="uppercase">{p.method?.replace('_', ' ') || 'N/A'}</td>
                                 <td className="text-right">${p.amount_usd.toFixed(2)}</td>
                             </tr>
                         ))}
