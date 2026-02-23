@@ -40,6 +40,9 @@ export default function DondeManoloApp() {
   const [lastOrderTicket, setLastOrderTicket] = useState(null);
   const [ticketType, setTicketType] = useState('full'); 
   const [closingData, setClosingData] = useState(null);
+  
+  // Reporte Global
+  const [globalReportDates, setGlobalReportDates] = useState({ start: '', end: '' });
 
   // Caja
   const [payAmount, setPayAmount] = useState('');
@@ -196,6 +199,7 @@ export default function DondeManoloApp() {
       }
 
       const report = {
+          isGlobal: false,
           id: session.id,
           opened_at: new Date(session.opened_at).toLocaleString(),
           closed_at: session.closed_at ? new Date(session.closed_at).toLocaleString() : 'EN CURSO',
@@ -206,13 +210,79 @@ export default function DondeManoloApp() {
           expenses: expensesTotal,
           net: totalSales - expensesTotal,
           breakdown, cashInUsd, cashInBs, productCount, inventoryUsage, 
-          sessionExpenses, // PASAMOS LOS GASTOS AL REPORTE
+          sessionExpenses,
           allPayments: allPayments.map(p => {
               const ord = sessionOrders.find(o => o.id === p.order_id);
               return { ...p, client_info: ord ? ord.info : '?', created_by: ord ? ord.created_by : '?' };
           })
       };
       
+      setClosingData(report);
+      setLoading(false);
+      setTimeout(() => window.print(), 500);
+  };
+
+  const handleGenerateGlobalReport = async () => {
+      if (!globalReportDates.start || !globalReportDates.end) return alert("Por favor seleccione fecha Desde y Hasta.");
+      setLoading(true);
+
+      const start = new Date(globalReportDates.start).toISOString();
+      const end = new Date(globalReportDates.end);
+      end.setHours(23, 59, 59, 999);
+      const endIso = end.toISOString();
+
+      const { data: sessions } = await supabase.from('cash_sessions').select('*').eq('status', 'closed').gte('closed_at', start).lte('closed_at', endIso);
+
+      if (!sessions || sessions.length === 0) {
+          alert("No hay turnos cerrados en este rango de fechas.");
+          setLoading(false);
+          return;
+      }
+
+      const sessionIds = sessions.map(s => s.id);
+
+      const { data: allOrders } = await supabase.from('orders').select('*, order_items(*), payments(*)').in('session_id', sessionIds).eq('status', 'pagado');
+      const { data: allExpenses } = await supabase.from('expenses').select('*').in('session_id', sessionIds);
+
+      const totalSales = (allOrders || []).reduce((sum, o) => sum + o.total_usd, 0);
+      const totalExpenses = (allExpenses || []).reduce((sum, e) => sum + e.amount, 0);
+      const net = totalSales - totalExpenses;
+
+      let allPayments = [];
+      (allOrders || []).forEach(o => { if (o.payments) allPayments = [...allPayments, ...o.payments]; });
+      const breakdown = allPayments.reduce((acc, curr) => {
+          acc[curr.method] = (acc[curr.method] || 0) + curr.amount_usd;
+          return acc;
+      }, {});
+
+      const productCount = {};
+      (allOrders || []).forEach(o => {
+          o.order_items.forEach(item => { productCount[item.product_name] = (productCount[item.product_name] || 0) + item.quantity; });
+      });
+
+      const inventoryUsage = {};
+      for (const [prodName, qty] of Object.entries(productCount)) {
+          const recipe = recipes[prodName];
+          if (recipe) {
+              recipe.forEach(rItem => {
+                  const ing = ingredients.find(i => i.id === rItem.ingredientId);
+                  if (ing) inventoryUsage[ing.name] = (inventoryUsage[ing.name] || 0) + (rItem.quantity * qty);
+              });
+          }
+      }
+
+      const report = {
+          isGlobal: true,
+          startDate: globalReportDates.start,
+          endDate: globalReportDates.end,
+          sessionsCount: sessions.length,
+          sales: totalSales,
+          expenses: totalExpenses,
+          net: net,
+          breakdown, productCount, inventoryUsage,
+          expensesList: allExpenses || []
+      };
+
       setClosingData(report);
       setLoading(false);
       setTimeout(() => window.print(), 500);
@@ -225,7 +295,7 @@ export default function DondeManoloApp() {
       setCurrentSession(null);
   };
 
-  // --- LOGICA NEGOCIO (CORREGIDA: DESCUENTO ATÓMICO) ---
+  // --- LOGICA NEGOCIO (CORREGIDA: DESCUENTO ATÓMICO + AUTO PRINT) ---
   const sendOrder = async () => {
     if (!currentSession) return alert("?? CAJA CERRADA");
     if (processing || cart.length === 0 || !serviceInfo.val) return alert("Falta info");
@@ -237,7 +307,7 @@ export default function DondeManoloApp() {
         const items = cart.map(i => ({ order_id: order.id, product_name: i.name, quantity: 1, price_at_time: i.price_usd, notes: i.notes || '' }));
         await supabase.from('order_items').insert(items);
         
-        // CORRECCIÓN: Agrupar insumos de todo el carrito y consultar stock real en BD
+        // Agrupar insumos de todo el carrito y consultar stock real en BD
         const inventoryUsage = {};
         for (let item of cart) {
             const productRecipe = recipes[item.name]; 
@@ -254,7 +324,17 @@ export default function DondeManoloApp() {
             }
         }
 
-        setTicketType('full'); setLastOrderTicket({ ...order, items: items }); setCart([]); setServiceInfo({ type: 'Mesa', val: '' }); loadData();
+        setTicketType('full'); 
+        setLastOrderTicket({ ...order, items: items }); 
+        setCart([]); 
+        setServiceInfo({ type: 'Mesa', val: '' }); 
+        loadData();
+        
+        // CORRECCIÓN: AUTO IMPRESIÓN SOLICITADA
+        if(confirm("¿Imprimir Ticket de Comanda?")) { 
+            setTimeout(() => window.print(), 500); 
+        }
+
     } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
 
@@ -292,7 +372,6 @@ export default function DondeManoloApp() {
       try {
           const { data: items } = await supabase.from('order_items').select('*').eq('order_id', orderId);
           if (items) {
-              // Agrupamos todo lo que se va a devolver
               const inventoryToReturn = {};
               for (let item of items) {
                   const productRecipe = recipes[item.product_name];
@@ -302,7 +381,6 @@ export default function DondeManoloApp() {
                       }
                   }
               }
-              // Devolvemos el stock consultando el monto en vivo
               for (const [ingId, qtyReturn] of Object.entries(inventoryToReturn)) {
                   const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingId).single();
                   if (freshData) {
@@ -332,7 +410,6 @@ export default function DondeManoloApp() {
     }]);
     
     if (newExpense.isStock && newExpense.ingredientId && newExpense.quantity) {
-        // Corrección de seguridad al recargar inventario
         const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', newExpense.ingredientId).single();
         if (freshData) {
             await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) + parseFloat(newExpense.quantity) }).eq('id', newExpense.ingredientId);
@@ -387,7 +464,6 @@ export default function DondeManoloApp() {
           const productRecipe = recipes[product.name];
           if (productRecipe) { 
               for (let ingItem of productRecipe) { 
-                  // Lectura en vivo antes de descontar
                   const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingItem.ingredientId).single();
                   if (freshData) {
                       await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) - ingItem.quantity }).eq('id', ingItem.ingredientId); 
@@ -408,7 +484,6 @@ export default function DondeManoloApp() {
         const productRecipe = recipes[item.product_name];
         if (productRecipe) { 
             for (let ingItem of productRecipe) { 
-                // Lectura en vivo antes de devolver al inventario
                 const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingItem.ingredientId).single();
                 if (freshData) {
                     await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) + ingItem.quantity }).eq('id', ingItem.ingredientId); 
@@ -482,8 +557,6 @@ export default function DondeManoloApp() {
               {user.role === 'owner' && (
                   <div className="bg-white p-6 rounded-lg shadow-md">
                       <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingDown className="text-red-500"/> Registrar Gasto</h3>
-                      
-                      {/* INTERFAZ MEJORADA PARA GASTOS E INVENTARIO */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded">
                           <input placeholder="Descripción del Gasto (Ej. Compra Pan, Nómina José...)" className="border p-2 rounded w-full" value={newExpense.desc} onChange={e => setNewExpense({...newExpense, desc: e.target.value})} />
                           <div className="flex gap-2">
@@ -539,9 +612,29 @@ export default function DondeManoloApp() {
       {/* REPORTES */}
       {view === 'reportes' && (
           <div className="max-w-7xl mx-auto p-4 space-y-6">
+              
+              {/* FASE 2: REPORTE GLOBAL (SOLO DUEÑO) */}
+              {user.role === 'owner' && (
+                  <div className="bg-white p-6 rounded-lg shadow-md no-print border-l-4 border-indigo-500">
+                      <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingUp className="text-indigo-600"/> Reporte Global Consolidado</h3>
+                      <div className="flex flex-wrap gap-4 items-end">
+                          <div>
+                              <label className="block text-sm text-gray-600 font-bold mb-1">Desde</label>
+                              <input type="date" className="border p-2 rounded w-full" value={globalReportDates.start} onChange={e => setGlobalReportDates({...globalReportDates, start: e.target.value})} />
+                          </div>
+                          <div>
+                              <label className="block text-sm text-gray-600 font-bold mb-1">Hasta</label>
+                              <input type="date" className="border p-2 rounded w-full" value={globalReportDates.end} onChange={e => setGlobalReportDates({...globalReportDates, end: e.target.value})} />
+                          </div>
+                          <button onClick={handleGenerateGlobalReport} className="bg-indigo-600 text-white px-6 py-2 rounded font-bold hover:bg-indigo-700 flex gap-2 items-center"><FileText size={16}/> Generar Reporte</button>
+                      </div>
+                  </div>
+              )}
+
               {currentSession && (<div className="bg-blue-50 p-6 rounded-lg border border-blue-200 flex justify-between items-center no-print"><div><h3 className="font-bold text-blue-900 text-lg">Turno Actual en Curso</h3><p className="text-sm text-blue-800">Visualiza cómo va el corte sin cerrar la caja.</p></div><button onClick={() => generateReportData(currentSession, false)} className="bg-blue-600 text-white px-4 py-2 rounded font-bold flex gap-2"><Eye/> VER CORTE PARCIAL</button></div>)}
+              
               <div className="bg-white p-6 rounded-lg shadow-md no-print">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Calendar/> Historial de Cierres (Últimos 20)</h3>
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Calendar/> Historial de Cierres Diarios (Últimos 20)</h3>
                   <table className="w-full text-left border-collapse">
                       <thead><tr className="bg-gray-100 border-b"><th className="p-3">ID</th><th className="p-3">Fecha Cierre</th><th className="p-3">Abierto Por</th><th className="p-3">Cerrado Por</th><th className="p-3">Acción</th></tr></thead>
                       <tbody>{sessionHistory.map(session => (<tr key={session.id} className="border-b hover:bg-gray-50"><td className="p-3 font-mono">#{session.id}</td><td className="p-3">{new Date(session.closed_at).toLocaleString()}</td><td className="p-3">{session.opened_by}</td><td className="p-3">{session.closed_by}</td><td className="p-3"><button onClick={() => generateReportData(session, true)} className="text-blue-600 hover:underline flex gap-1 items-center font-bold"><Printer size={16}/> Ver Reporte</button></td></tr>))}</tbody>
@@ -726,9 +819,13 @@ export default function DondeManoloApp() {
       )}
 
     {/* --- DOCUMENTO DE CIERRE DETALLADO --- */}
-    {closingData && (
-        <div id="cierre-impresion" className="p-8 font-sans">
-            <div className="border-b-2 border-black pb-4 mb-6 flex justify-between">
+    {closingData && !closingData.isGlobal && (
+        <div id="cierre-impresion" className="p-8 font-sans bg-white relative">
+            <div className="no-print absolute top-0 right-0 p-4">
+                <button onClick={() => setClosingData(null)} className="bg-red-600 text-white px-4 py-2 rounded font-bold">Cerrar Visualización</button>
+            </div>
+            
+            <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
                 <div><h1 className="text-3xl font-bold">REPORTE DE TURNO</h1><p className="text-gray-600">Donde Manolo - Control de Caja</p></div>
                 <div className="text-right text-sm"><p><strong>Apertura:</strong> {closingData.opened_at}</p><p><strong>Cierre:</strong> {closingData.closed_at}</p><p><strong>ID Sesión:</strong> #{closingData.id}</p></div>
             </div>
@@ -743,7 +840,6 @@ export default function DondeManoloApp() {
                 </div>
             </div>
 
-            {/* NUEVA SECCIÓN DE GASTOS DETALLADOS */}
             {closingData.sessionExpenses && closingData.sessionExpenses.length > 0 && (
                 <div className="mb-6">
                     <h3 className="font-bold text-lg mb-2 border-b">DETALLE DE GASTOS / SALIDAS</h3>
@@ -787,7 +883,6 @@ export default function DondeManoloApp() {
             </div>
             
             <div className="mb-6 page-break">
-                {/* TABLA DE ÓRDENES ACTUALIZADA CON COLUMNA DE MESERO */}
                 <h3 className="font-bold text-lg mb-2 border-b">DETALLE DE ORDENES (MANAGER/CAJA)</h3>
                 <table className="w-full text-xs">
                     <thead>
@@ -839,6 +934,75 @@ export default function DondeManoloApp() {
                 <div className="w-1/3 border-t border-black"><p>Firma Cajero Entrante</p></div>
                 <div className="w-1/3 border-t border-black"><p>Firma Cajero Saliente / Manager</p></div>
             </div>
+        </div>
+    )}
+
+    {/* --- DOCUMENTO REPORTE GLOBAL (FASE 2) --- */}
+    {closingData && closingData.isGlobal && (
+        <div id="cierre-impresion" className="p-8 font-sans bg-white relative">
+            <div className="no-print absolute top-0 right-0 p-4">
+                <button onClick={() => setClosingData(null)} className="bg-red-600 text-white px-4 py-2 rounded font-bold">Cerrar Visualización</button>
+            </div>
+            
+            <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
+                <div><h1 className="text-3xl font-bold">REPORTE CONSOLIDADO GLOBAL</h1><p className="text-gray-600">Donde Manolo - Gerencia</p></div>
+                <div className="text-right text-sm"><p><strong>Desde:</strong> {closingData.startDate}</p><p><strong>Hasta:</strong> {closingData.endDate}</p><p><strong>Turnos Auditados:</strong> {closingData.sessionsCount}</p></div>
+            </div>
+
+            <div className="mb-6 border rounded p-4 bg-gray-50">
+                <h3 className="font-bold text-lg mb-2 border-b border-gray-300">BALANCE CONSOLIDADO</h3>
+                <div className="grid grid-cols-2 gap-4 text-lg">
+                    <div>Ventas Totales: <span className="font-bold text-green-700">${closingData.sales.toFixed(2)}</span></div>
+                    <div>Gastos Totales: <span className="font-bold text-red-600">${closingData.expenses.toFixed(2)}</span></div>
+                    <div className="border-t border-black pt-2 font-bold text-xl col-span-2 text-center bg-indigo-50 py-2 rounded mt-2">UTILIDAD NETA: ${closingData.net.toFixed(2)}</div>
+                </div>
+            </div>
+
+            <div className="mb-6">
+                <h3 className="font-bold text-lg mb-2 border-b">INGRESOS POR MEDIOS DE PAGO</h3>
+                <table className="w-full text-sm border">
+                    <thead className="bg-gray-100"><tr><th className="p-2 text-left">Método</th><th className="p-2 text-right">Monto</th></tr></thead>
+                    <tbody>{Object.entries(closingData.breakdown).map(([m, v]) => (<tr key={m} className="border-b"><td className="p-2 uppercase">{m.replace('_', ' ')}</td><td className="p-2 text-right font-bold">${v.toFixed(2)}</td></tr>))}</tbody>
+                </table>
+            </div>
+
+            <div className="grid grid-cols-2 gap-8 mb-6">
+                <div>
+                    <h4 className="font-bold border-b mb-2">Top Productos Vendidos</h4>
+                    <table className="w-full text-xs">
+                        <thead><tr><th className="text-left">Producto</th><th className="text-right">Cant. Total</th></tr></thead>
+                        <tbody>{Object.entries(closingData.productCount).sort((a,b)=>b[1]-a[1]).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold text-indigo-700">{qty}</td></tr>))}</tbody>
+                    </table>
+                </div>
+                <div>
+                    <h4 className="font-bold border-b mb-2">Consumo Teórico de Insumos</h4>
+                    <table className="w-full text-xs">
+                        <thead><tr><th className="text-left">Insumo</th><th className="text-right">Gastado Aprox</th></tr></thead>
+                        <tbody>{Object.entries(closingData.inventoryUsage).sort((a,b)=>b[1]-a[1]).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold text-red-600">{qty.toFixed(2)}</td></tr>))}</tbody>
+                    </table>
+                </div>
+            </div>
+
+            {closingData.expensesList && closingData.expensesList.length > 0 && (
+                <div className="mb-6 page-break">
+                    <h3 className="font-bold text-lg mb-2 border-b">RESUMEN DE GASTOS / SALIDAS</h3>
+                    <table className="w-full text-xs border">
+                        <thead className="bg-gray-100">
+                            <tr><th className="p-2 text-left">Fecha</th><th className="p-2 text-left">Descripción</th><th className="p-2 text-left">Categoría</th><th className="p-2 text-right">Monto</th></tr>
+                        </thead>
+                        <tbody>
+                            {closingData.expensesList.map(e => (
+                                <tr key={e.id} className="border-b hover:bg-gray-50">
+                                    <td className="p-2">{new Date(e.created_at || e.date).toLocaleDateString()}</td>
+                                    <td className="p-2 font-bold">{e.description}</td>
+                                    <td className="p-2 uppercase">{e.category}</td>
+                                    <td className="p-2 text-right text-red-600 font-bold">${e.amount.toFixed(2)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     )}
 
