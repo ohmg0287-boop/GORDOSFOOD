@@ -151,6 +151,7 @@ export default function DondeManoloApp() {
       setLoading(false);
   };
 
+  // --- MODIFICADO: GENERACIÓN DE REPORTE CON TASA Y DETALLES ---
   const generateReportData = async (session, isHistorical = false) => {
       setLoading(true);
       let sessionOrders = [];
@@ -195,11 +196,11 @@ export default function DondeManoloApp() {
           }
       }
 
-      // --- CAMBIO 1: AGREGAMOS TASA Y DETALLES AL REPORTE ---
+      // 1. AQUI SE GUARDAN LOS DATOS PARA MOSTRAR
       const report = {
           isGlobal: false,
           id: session.id,
-          tasa_calculo: tasa, // Guardamos la tasa actual
+          tasa_registrada: tasa, // <-- GUARDAMOS LA TASA
           opened_at: new Date(session.opened_at).toLocaleString(),
           closed_at: session.closed_at ? new Date(session.closed_at).toLocaleString() : 'EN CURSO',
           opened_by: session.opened_by,
@@ -212,7 +213,7 @@ export default function DondeManoloApp() {
           sessionExpenses,
           allPayments: allPayments.map(p => {
               const ord = sessionOrders.find(o => o.id === p.order_id);
-              // Agregamos items_detalle para el reporte del dueño
+              // <-- AGREGAMOS DETALLE DE ITEMS
               return { 
                   ...p, 
                   client_info: ord ? ord.info : '?', 
@@ -824,7 +825,7 @@ export default function DondeManoloApp() {
         </div>
       )}
 
-    {/* --- DOCUMENTO DE CIERRE DETALLADO (MODIFICADO) --- */}
+    {/* --- DOCUMENTO DE CIERRE DETALLADO (V2 - MODIFICADO) --- */}
     {closingData && !closingData.isGlobal && (
         <div id="cierre-impresion" className="p-8 font-sans bg-white relative">
             <div className="no-print absolute top-0 right-0 p-4">
@@ -833,11 +834,12 @@ export default function DondeManoloApp() {
             
             <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
                 <div>
-                    <h1 className="text-3xl font-bold">REPORTE DE TURNO</h1>
+                    {/* INDICADOR VISUAL DE QUE EL CODIGO FUNCIONA */}
+                    <h1 className="text-3xl font-bold">REPORTE DETALLADO (V2)</h1>
                     <p className="text-gray-600">Donde Manolo - Control de Caja</p>
                     {/* 1. MOSTRAR TASA UTILIZADA */}
                     <p className="text-sm font-bold mt-2 bg-yellow-100 inline-block px-2 border border-yellow-300">
-                        Tasa de Cambio: {closingData.tasa_calculo} Bs/$
+                        Tasa de Cambio: {closingData.tasa_registrada} Bs/$
                     </p>
                 </div>
                 <div className="text-right text-sm"><p><strong>Apertura:</strong> {closingData.opened_at}</p><p><strong>Cierre:</strong> {closingData.closed_at}</p><p><strong>ID Sesión:</strong> #{closingData.id}</p></div>
@@ -892,7 +894,7 @@ export default function DondeManoloApp() {
                                 <td className="p-2 uppercase font-bold">{m.replace('_', ' ')}</td>
                                 <td className="p-2 text-right font-bold">${v.toFixed(2)}</td>
                                 <td className="p-2 text-right text-gray-600 font-mono">
-                                    Bs {(v * closingData.tasa_calculo).toFixed(2)}
+                                    Bs {(v * closingData.tasa_registrada).toFixed(2)}
                                 </td>
                             </tr>
                         ))}
