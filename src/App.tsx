@@ -14,7 +14,6 @@ export default function DondeManoloApp() {
   // --- ESTADO DE SESIÓN (TURNO) ---
   const [currentSession, setCurrentSession] = useState(null); 
   const [sessionHistory, setSessionHistory] = useState([]);
-
   const [tasa, setTasa] = useState(() => {
     const saved = localStorage.getItem('tasa_bcv');
     return saved ? parseFloat(saved) : 0;
@@ -23,7 +22,7 @@ export default function DondeManoloApp() {
   // Datos Generales
   const [products, setProducts] = useState([]);
   const [ingredients, setIngredients] = useState([]);
-  const [recipes, setRecipes] = useState({}); 
+  const [recipes, setRecipes] = useState({});
   const [orders, setOrders] = useState([]); 
   const [expenses, setExpenses] = useState([]); 
   const [staffList, setStaffList] = useState([]);
@@ -40,7 +39,7 @@ export default function DondeManoloApp() {
   const [lastOrderTicket, setLastOrderTicket] = useState(null);
   const [ticketType, setTicketType] = useState('full'); 
   const [closingData, setClosingData] = useState(null);
-  
+
   // Reporte Global
   const [globalReportDates, setGlobalReportDates] = useState({ start: '', end: '' });
 
@@ -59,7 +58,6 @@ export default function DondeManoloApp() {
   useEffect(() => {
       fetchOrdersRef.current = fetchOrders;
   });
-
   useEffect(() => {
     if (user) {
       loadData();
@@ -89,7 +87,6 @@ export default function DondeManoloApp() {
   const loadData = async () => {
     setLoading(true);
     await fetchRate();
-    
     // 1. SESIÓN ACTIVA
     const { data: sessionData } = await supabase.from('cash_sessions').select('*').eq('status', 'open').maybeSingle();
     setCurrentSession(sessionData || null);
@@ -97,7 +94,7 @@ export default function DondeManoloApp() {
     // 2. Tablas Base
     const p = await supabase.from('products').select('*').order('name');
     const i = await supabase.from('ingredients').select('*').order('name');
-    
+
     // 3. Recetas
     const r = await supabase.from('recipes').select('*');
     const recipesMap = {};
@@ -172,12 +169,12 @@ export default function DondeManoloApp() {
       const totalSales = sessionOrders.filter(o => o.status === 'pagado').reduce((sum, o) => sum + o.total_usd, 0);
       let allPayments = [];
       sessionOrders.forEach(o => { if (o.payments) allPayments = [...allPayments, ...o.payments]; });
-
+      
       const breakdown = allPayments.reduce((acc, curr) => {
           acc[curr.method] = (acc[curr.method] || 0) + curr.amount_usd;
           return acc;
       }, {});
-
+      
       const expensesTotal = sessionExpenses.reduce((sum, e) => sum + e.amount, 0);
       const cashInUsd = (breakdown['usd_efectivo'] || 0) + parseFloat(session.base_amount);
       const cashInBs = allPayments.filter(p => p.method === 'bs_efectivo').reduce((s, p) => s + p.amount_bs, 0);
@@ -186,7 +183,7 @@ export default function DondeManoloApp() {
       sessionOrders.filter(o => o.status === 'pagado').forEach(o => {
           o.order_items.forEach(item => { productCount[item.product_name] = (productCount[item.product_name] || 0) + item.quantity; });
       });
-
+      
       const inventoryUsage = {};
       for (const [prodName, qty] of Object.entries(productCount)) {
           const recipe = recipes[prodName];
@@ -198,9 +195,11 @@ export default function DondeManoloApp() {
           }
       }
 
+      // --- CAMBIO 1: AGREGAMOS TASA Y DETALLES AL REPORTE ---
       const report = {
           isGlobal: false,
           id: session.id,
+          tasa_calculo: tasa, // Guardamos la tasa actual
           opened_at: new Date(session.opened_at).toLocaleString(),
           closed_at: session.closed_at ? new Date(session.closed_at).toLocaleString() : 'EN CURSO',
           opened_by: session.opened_by,
@@ -213,10 +212,16 @@ export default function DondeManoloApp() {
           sessionExpenses,
           allPayments: allPayments.map(p => {
               const ord = sessionOrders.find(o => o.id === p.order_id);
-              return { ...p, client_info: ord ? ord.info : '?', created_by: ord ? ord.created_by : '?' };
+              // Agregamos items_detalle para el reporte del dueño
+              return { 
+                  ...p, 
+                  client_info: ord ? ord.info : '?', 
+                  created_by: ord ? ord.created_by : '?',
+                  items_detalle: ord ? ord.order_items : [] 
+              };
           })
       };
-      
+
       setClosingData(report);
       setLoading(false);
       setTimeout(() => window.print(), 500);
@@ -230,9 +235,8 @@ export default function DondeManoloApp() {
       const end = new Date(globalReportDates.end);
       end.setHours(23, 59, 59, 999);
       const endIso = end.toISOString();
-
+      
       const { data: sessions } = await supabase.from('cash_sessions').select('*').eq('status', 'closed').gte('closed_at', start).lte('closed_at', endIso);
-
       if (!sessions || sessions.length === 0) {
           alert("No hay turnos cerrados en este rango de fechas.");
           setLoading(false);
@@ -240,26 +244,26 @@ export default function DondeManoloApp() {
       }
 
       const sessionIds = sessions.map(s => s.id);
-
       const { data: allOrders } = await supabase.from('orders').select('*, order_items(*), payments(*)').in('session_id', sessionIds).eq('status', 'pagado');
       const { data: allExpenses } = await supabase.from('expenses').select('*').in('session_id', sessionIds);
 
       const totalSales = (allOrders || []).reduce((sum, o) => sum + o.total_usd, 0);
       const totalExpenses = (allExpenses || []).reduce((sum, e) => sum + e.amount, 0);
       const net = totalSales - totalExpenses;
-
+      
       let allPayments = [];
       (allOrders || []).forEach(o => { if (o.payments) allPayments = [...allPayments, ...o.payments]; });
+      
       const breakdown = allPayments.reduce((acc, curr) => {
           acc[curr.method] = (acc[curr.method] || 0) + curr.amount_usd;
           return acc;
       }, {});
-
+      
       const productCount = {};
       (allOrders || []).forEach(o => {
           o.order_items.forEach(item => { productCount[item.product_name] = (productCount[item.product_name] || 0) + item.quantity; });
       });
-
+      
       const inventoryUsage = {};
       for (const [prodName, qty] of Object.entries(productCount)) {
           const recipe = recipes[prodName];
@@ -295,7 +299,7 @@ export default function DondeManoloApp() {
       setCurrentSession(null);
   };
 
-  // --- LOGICA NEGOCIO (CORREGIDA: DESCUENTO ATÓMICO + AUTO PRINT) ---
+  // --- LOGICA NEGOCIO ---
   const sendOrder = async () => {
     if (!currentSession) return alert("?? CAJA CERRADA");
     if (processing || cart.length === 0 || !serviceInfo.val) return alert("Falta info");
@@ -307,10 +311,9 @@ export default function DondeManoloApp() {
         const items = cart.map(i => ({ order_id: order.id, product_name: i.name, quantity: 1, price_at_time: i.price_usd, notes: i.notes || '' }));
         await supabase.from('order_items').insert(items);
         
-        // Agrupar insumos de todo el carrito y consultar stock real en BD
         const inventoryUsage = {};
         for (let item of cart) {
-            const productRecipe = recipes[item.name]; 
+            const productRecipe = recipes[item.name];
             if (productRecipe) { 
                 for (let ingItem of productRecipe) { 
                     inventoryUsage[ingItem.ingredientId] = (inventoryUsage[ingItem.ingredientId] || 0) + ingItem.quantity;
@@ -324,15 +327,14 @@ export default function DondeManoloApp() {
             }
         }
 
-        setTicketType('full'); 
+        setTicketType('full');
         setLastOrderTicket({ ...order, items: items }); 
         setCart([]); 
         setServiceInfo({ type: 'Mesa', val: '' }); 
         loadData();
         
-        // CORRECCIÓN: AUTO IMPRESIÓN SOLICITADA
         if(confirm("¿Imprimir Ticket de Comanda?")) { 
-            setTimeout(() => window.print(), 500); 
+            setTimeout(() => window.print(), 500);
         }
 
     } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
@@ -346,8 +348,8 @@ export default function DondeManoloApp() {
           await supabase.from('order_items').insert([{ order_id: selectedOrder.id, product_name: type.toUpperCase(), quantity: 1, price_at_time: parseFloat(amount), notes: 'CARGO ADICIONAL' }]);
           await supabase.from('orders').update({ total_usd: selectedOrder.total_usd + parseFloat(amount) }).eq('id', selectedOrder.id);
           fetchOrders(); 
-      } catch (e) { alert("Error al agregar extra: " + e.message); }
-      finally { setProcessing(false); }
+      } catch (e) { alert("Error al agregar extra: " + e.message);
+      } finally { setProcessing(false); }
   };
 
   const handlePayment = async () => {
@@ -392,14 +394,14 @@ export default function DondeManoloApp() {
           await supabase.from('order_items').delete().eq('order_id', orderId);
           await supabase.from('orders').delete().eq('id', orderId);
           alert("Orden eliminada."); setSelectedOrder(null); fetchOrders();
-      } catch (e) { alert("Error: " + e.message); } finally { setLoading(false); }
+      } catch (e) { alert("Error: " + e.message);
+      } finally { setLoading(false); }
   };
 
   const registerExpenseTransaction = async () => {
     if (!currentSession) return alert("Caja Cerrada");
     if (!newExpense.desc || !newExpense.amount) return alert("Faltan datos");
     if (newExpense.isStock && (!newExpense.ingredientId || !newExpense.quantity)) return alert("Falta seleccionar el insumo o la cantidad.");
-    
     setLoading(true);
     await supabase.from('expenses').insert([{ 
         description: newExpense.desc, 
@@ -408,14 +410,14 @@ export default function DondeManoloApp() {
         registered_by: user.name, 
         session_id: currentSession.id 
     }]);
-    
     if (newExpense.isStock && newExpense.ingredientId && newExpense.quantity) {
         const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', newExpense.ingredientId).single();
         if (freshData) {
             await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) + parseFloat(newExpense.quantity) }).eq('id', newExpense.ingredientId);
         }
     }
-    setNewExpense({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' }); loadData(); setLoading(false);
+    setNewExpense({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' });
+    loadData(); setLoading(false);
   };
 
   const handleStaff = async (action, staffData) => {
@@ -434,7 +436,8 @@ export default function DondeManoloApp() {
     loadData();
   };
 
-  const handleAddIngredient = async () => { const n = prompt("Nombre:"); if(n) { const u = prompt("Unidad:"); await supabase.from('ingredients').insert([{ name:n, unit:u, stock: 0 }]); loadData(); }};
+  const handleAddIngredient = async () => { const n = prompt("Nombre:"); if(n) { const u = prompt("Unidad:");
+    await supabase.from('ingredients').insert([{ name:n, unit:u, stock: 0 }]); loadData(); }};
   const handleDeleteIngredient = async (id) => {
       if (user.role !== 'owner') return alert("Solo el dueño puede eliminar insumos.");
       if (!confirm("⚠️ ¿Eliminar insumo? SE BORRARÁ DE TODAS LAS RECETAS.")) return;
@@ -443,19 +446,20 @@ export default function DondeManoloApp() {
       if (error) alert("Error: " + error.message); else { alert("Eliminado."); loadData(); }
       setLoading(false);
   };
-
-  const handleAddIngredientToRecipe = async () => { if (!selectedProductRecipe || !newRecipeEntry.ingredientId) return; setLoading(true); await supabase.from('recipes').insert([{ product_name: selectedProductRecipe, ingredient_id: newRecipeEntry.ingredientId, quantity: parseFloat(newRecipeEntry.quantity) }]); setNewRecipeEntry({ ingredientId: '', quantity: '' }); loadData(); setLoading(false); };
+  const handleAddIngredientToRecipe = async () => { if (!selectedProductRecipe || !newRecipeEntry.ingredientId) return; setLoading(true);
+    await supabase.from('recipes').insert([{ product_name: selectedProductRecipe, ingredient_id: newRecipeEntry.ingredientId, quantity: parseFloat(newRecipeEntry.quantity) }]); setNewRecipeEntry({ ingredientId: '', quantity: '' }); loadData(); setLoading(false); };
   const handleRemoveRecipeItem = async (id) => { if (confirm("¿Eliminar?")) { setLoading(true); await supabase.from('recipes').delete().eq('id', id); loadData(); setLoading(false); }};
-  
   const login = async (pin) => {
     const { data, error } = await supabase.from('staff').select('*').eq('pin', pin).maybeSingle();
     if (error || !data) { alert("PIN Incorrecto"); return; }
     setUser(data);
-    if (['owner', 'manager'].includes(data.role)) setView('dashboard'); else if (data.role === 'caja') setView('caja'); else if (data.role === 'mesero') setView('pedidos'); else if (data.role === 'cocina') setView('cocina');
+    if (['owner', 'manager'].includes(data.role)) setView('dashboard');
+    else if (data.role === 'caja') setView('caja'); else if (data.role === 'mesero') setView('pedidos'); else if (data.role === 'cocina') setView('cocina');
   };
 
   const handleAddItemToOrder = async (product) => { 
-      if (!selectedOrder || processing) return; if (!confirm(`¿Agregar ${product.name}?`)) return;
+      if (!selectedOrder || processing) return;
+      if (!confirm(`¿Agregar ${product.name}?`)) return;
       setProcessing(true); setLoading(true);
       try {
           await supabase.from('order_items').insert([{ order_id: selectedOrder.id, product_name: product.name, quantity: 1, price_at_time: product.price_usd, notes: 'ANEXO' }]);
@@ -466,17 +470,21 @@ export default function DondeManoloApp() {
               for (let ingItem of productRecipe) { 
                   const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingItem.ingredientId).single();
                   if (freshData) {
-                      await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) - ingItem.quantity }).eq('id', ingItem.ingredientId); 
+                      await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) - ingItem.quantity }).eq('id', ingItem.ingredientId);
                   }
               } 
           }
-          alert("Agregado"); if(confirm("¿Imprimir Ticket?")) { setTicketType('anexo'); setLastOrderTicket({ ...selectedOrder, items: [{ product_name: product.name, quantity: 1, notes: 'ANEXO' }] }); setTimeout(() => window.print(), 500); }
+          alert("Agregado");
+          if(confirm("¿Imprimir Ticket?")) { setTicketType('anexo'); setLastOrderTicket({ ...selectedOrder, items: [{ product_name: product.name, quantity: 1, notes: 'ANEXO' }] }); setTimeout(() => window.print(), 500);
+          }
           fetchOrders();
-      } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
+      } catch (e) { alert("Error: " + e.message);
+      } finally { setProcessing(false); setLoading(false); }
   };
 
   const handleRemoveItemFromOrder = async (item) => { 
-      if (processing || !confirm(`¿Eliminar ${item.product_name}?`)) return; setProcessing(true); setLoading(true);
+      if (processing || !confirm(`¿Eliminar ${item.product_name}?`)) return;
+      setProcessing(true); setLoading(true);
       try {
         await supabase.from('order_items').delete().eq('id', item.id);
         await supabase.from('orders').update({ total_usd: Math.max(0, selectedOrder.total_usd - item.price_at_time) }).eq('id', selectedOrder.id);
@@ -486,18 +494,17 @@ export default function DondeManoloApp() {
             for (let ingItem of productRecipe) { 
                 const { data: freshData } = await supabase.from('ingredients').select('stock').eq('id', ingItem.ingredientId).single();
                 if (freshData) {
-                    await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) + ingItem.quantity }).eq('id', ingItem.ingredientId); 
+                    await supabase.from('ingredients').update({ stock: parseFloat(freshData.stock) + ingItem.quantity }).eq('id', ingItem.ingredientId);
                 }
             } 
         }
         fetchOrders();
-      } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
+        } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
-
   const addToCart = (product) => setCart(prev => [...prev, { ...product, tempId: Date.now() + Math.random() }]);
   const removeFromCart = (tempId) => setCart(prev => prev.filter(item => item.tempId !== tempId));
   const updateCartNote = (tempId, note) => setCart(prev => prev.map(item => item.tempId === tempId ? { ...item, notes: note } : item));
-
+  
   // --- UI ---
   if (!user) return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
@@ -510,7 +517,6 @@ export default function DondeManoloApp() {
       </div>
     </div>
   );
-
   return (
     <div className="min-h-screen pb-20 bg-gray-100 font-sans">
       <nav className="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-lg no-print">
@@ -613,7 +619,7 @@ export default function DondeManoloApp() {
       {view === 'reportes' && (
           <div className="max-w-7xl mx-auto p-4 space-y-6">
               
-              {/* FASE 2: REPORTE GLOBAL (SOLO DUEÑO) */}
+              {/* REPORTE GLOBAL (SOLO DUEÑO) */}
               {user.role === 'owner' && (
                   <div className="bg-white p-6 rounded-lg shadow-md no-print border-l-4 border-indigo-500">
                       <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><TrendingUp className="text-indigo-600"/> Reporte Global Consolidado</h3>
@@ -818,7 +824,7 @@ export default function DondeManoloApp() {
         </div>
       )}
 
-    {/* --- DOCUMENTO DE CIERRE DETALLADO --- */}
+    {/* --- DOCUMENTO DE CIERRE DETALLADO (MODIFICADO) --- */}
     {closingData && !closingData.isGlobal && (
         <div id="cierre-impresion" className="p-8 font-sans bg-white relative">
             <div className="no-print absolute top-0 right-0 p-4">
@@ -826,7 +832,14 @@ export default function DondeManoloApp() {
             </div>
             
             <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
-                <div><h1 className="text-3xl font-bold">REPORTE DE TURNO</h1><p className="text-gray-600">Donde Manolo - Control de Caja</p></div>
+                <div>
+                    <h1 className="text-3xl font-bold">REPORTE DE TURNO</h1>
+                    <p className="text-gray-600">Donde Manolo - Control de Caja</p>
+                    {/* 1. MOSTRAR TASA UTILIZADA */}
+                    <p className="text-sm font-bold mt-2 bg-yellow-100 inline-block px-2 border border-yellow-300">
+                        Tasa de Cambio: {closingData.tasa_calculo} Bs/$
+                    </p>
+                </div>
                 <div className="text-right text-sm"><p><strong>Apertura:</strong> {closingData.opened_at}</p><p><strong>Cierre:</strong> {closingData.closed_at}</p><p><strong>ID Sesión:</strong> #{closingData.id}</p></div>
             </div>
 
@@ -836,21 +849,17 @@ export default function DondeManoloApp() {
                     <div>Base Inicial: <span className="font-bold">${Number(closingData.base).toFixed(2)}</span></div>
                     <div>+ Ventas Totales: <span className="font-bold text-green-700">${closingData.sales.toFixed(2)}</span></div>
                     <div>- Gastos Registrados: <span className="font-bold text-red-600">${closingData.expenses.toFixed(2)}</span></div>
-                    <div className="border-t border-black pt-2 font-bold text-xl">TOTAL EN CAJA: ${closingData.net.toFixed(2)}</div>
+                    <div className="border-t border-black pt-2 font-bold text-xl col-span-2">TOTAL EN CAJA: ${closingData.net.toFixed(2)}</div>
                 </div>
             </div>
 
+            {/* GASTOS */}
             {closingData.sessionExpenses && closingData.sessionExpenses.length > 0 && (
                 <div className="mb-6">
                     <h3 className="font-bold text-lg mb-2 border-b">DETALLE DE GASTOS / SALIDAS</h3>
                     <table className="w-full text-xs border">
                         <thead className="bg-gray-100">
-                            <tr>
-                                <th className="p-2 text-left">Hora</th>
-                                <th className="p-2 text-left">Descripción</th>
-                                <th className="p-2 text-left">Categoría</th>
-                                <th className="p-2 text-right">Monto</th>
-                            </tr>
+                            <tr><th className="p-2 text-left">Hora</th><th className="p-2 text-left">Descripción</th><th className="p-2 text-left">Categoría</th><th className="p-2 text-right">Monto</th></tr>
                         </thead>
                         <tbody>
                             {closingData.sessionExpenses.map(e => (
@@ -866,70 +875,77 @@ export default function DondeManoloApp() {
                 </div>
             )}
 
+            {/* 2. DESGLOSE DE MEDIOS DE PAGO EN $ Y BS */}
             <div className="mb-6">
                 <h3 className="font-bold text-lg mb-2 border-b">DESGLOSE DE MEDIOS DE PAGO</h3>
                 <table className="w-full text-sm border">
-                    <thead className="bg-gray-100"><tr><th className="p-2 text-left">Método</th><th className="p-2 text-right">Monto</th></tr></thead>
-                    <tbody>{Object.entries(closingData.breakdown).map(([m, v]) => (<tr key={m} className="border-b"><td className="p-2 uppercase">{m.replace('_', ' ')}</td><td className="p-2 text-right font-bold">${v.toFixed(2)}</td></tr>))}</tbody>
-                </table>
-            </div>
-
-            <div className="mb-6 border-2 border-black p-4 rounded">
-                <h3 className="font-bold text-center text-xl mb-4">?? ARQUEO DE EFECTIVO (LO QUE DEBE HABER)</h3>
-                <div className="flex justify-around text-center">
-                    <div><div className="text-sm text-gray-500">EFECTIVO USD (Inc. Base)</div><div className="text-4xl font-bold">${closingData.cashInUsd.toFixed(2)}</div></div>
-                    <div><div className="text-sm text-gray-500">EFECTIVO BOLIVARES</div><div className="text-4xl font-bold">Bs {closingData.cashInBs.toFixed(2)}</div></div>
-                </div>
-            </div>
-            
-            <div className="mb-6 page-break">
-                {/* TABLA DE ÓRDENES CON MÉTODO DE PAGO */}
-                <h3 className="font-bold text-lg mb-2 border-b">DETALLE DE ORDENES (MANAGER/CAJA)</h3>
-                <table className="w-full text-xs">
-                    <thead>
+                    <thead className="bg-gray-100">
                         <tr>
-                            <th className="text-left">Hora</th>
-                            <th className="text-left">Mesa / Cliente</th>
-                            <th className="text-left">Mesero (Tomó Pedido)</th>
-                            <th className="text-left">Cajero (Cobró)</th>
-                            <th className="text-left">Método de Pago</th>
-                            <th className="text-right">Monto</th>
+                            <th className="p-2 text-left">Método</th>
+                            <th className="p-2 text-right">Monto USD</th>
+                            <th className="p-2 text-right">Equivalente Bs</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {closingData.allPayments?.map((p, i) => (
-                            <tr key={i} className="border-b">
-                                <td>{new Date(p.created_at).toLocaleTimeString()}</td>
-                                <td className="font-bold">{p.client_info}</td>
-                                <td>{p.created_by || 'N/A'}</td>
-                                <td>{p.cashier || 'N/A'}</td>
-                                <td className="uppercase">{p.method?.replace('_', ' ') || 'N/A'}</td>
-                                <td className="text-right">${p.amount_usd.toFixed(2)}</td>
+                        {Object.entries(closingData.breakdown).map(([m, v]) => (
+                            <tr key={m} className="border-b">
+                                <td className="p-2 uppercase font-bold">{m.replace('_', ' ')}</td>
+                                <td className="p-2 text-right font-bold">${v.toFixed(2)}</td>
+                                <td className="p-2 text-right text-gray-600 font-mono">
+                                    Bs {(v * closingData.tasa_calculo).toFixed(2)}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
 
+            <div className="mb-6 border-2 border-black p-4 rounded bg-white">
+                <h3 className="font-bold text-center text-xl mb-4">💰 ARQUEO DE EFECTIVO</h3>
+                <div className="flex justify-around text-center">
+                    <div><div className="text-sm text-gray-500">EFECTIVO USD (Inc. Base)</div><div className="text-4xl font-bold">${closingData.cashInUsd.toFixed(2)}</div></div>
+                    <div><div className="text-sm text-gray-500">EFECTIVO BOLIVARES</div><div className="text-4xl font-bold">Bs {closingData.cashInBs.toFixed(2)}</div></div>
+                </div>
+            </div>
+            
+            {/* 3. DETALLE DE MESAS PARA EL DUEÑO */}
             {user.role === 'owner' && (
-                <div className="mt-8 border-t-4 border-black pt-4">
-                    <h2 className="text-2xl font-bold mb-4 text-center">ANEXO CONFIDENCIAL (SOLO DUEÑO)</h2>
-                    <div className="grid grid-cols-2 gap-8">
-                        <div>
-                            <h4 className="font-bold border-b mb-2">Ranking de Productos Vendidos</h4>
-                            <table className="w-full text-xs">
-                                <thead><tr><th className="text-left">Producto</th><th className="text-right">Cant.</th></tr></thead>
-                                <tbody>{Object.entries(closingData.productCount).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold">{qty}</td></tr>))}</tbody>
-                            </table>
-                        </div>
-                        <div>
-                            <h4 className="font-bold border-b mb-2">Consumo Teórico de Insumos</h4>
-                            <table className="w-full text-xs">
-                                <thead><tr><th className="text-left">Insumo</th><th className="text-right">Consumo Aprox</th></tr></thead>
-                                <tbody>{Object.entries(closingData.inventoryUsage).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold">{qty.toFixed(2)}</td></tr>))}</tbody>
-                            </table>
-                        </div>
+                <div className="mt-8 border-t-4 border-black pt-4 page-break">
+                    <h2 className="text-2xl font-bold mb-4 text-center bg-black text-white py-1">DETALLE CONFIDENCIAL (DUEÑO)</h2>
+                    
+                    <div className="grid grid-cols-2 gap-8 mb-6">
+                         <div><h4 className="font-bold border-b mb-2">Ranking Productos</h4><table className="w-full text-xs"><thead><tr><th className="text-left">Producto</th><th className="text-right">Cant.</th></tr></thead><tbody>{Object.entries(closingData.productCount).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold">{qty}</td></tr>))}</tbody></table></div>
+                         <div><h4 className="font-bold border-b mb-2">Consumo Insumos</h4><table className="w-full text-xs"><thead><tr><th className="text-left">Insumo</th><th className="text-right">Aprox</th></tr></thead><tbody>{Object.entries(closingData.inventoryUsage).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold">{qty.toFixed(2)}</td></tr>))}</tbody></table></div>
                     </div>
+
+                    <h3 className="font-bold text-lg mb-2 border-b">AUDITORÍA DE MESAS Y COBROS</h3>
+                    <table className="w-full text-xs border">
+                        <thead className="bg-gray-200">
+                            <tr>
+                                <th className="p-1 text-left">Hora</th>
+                                <th className="p-1 text-left">Mesa/Cliente</th>
+                                <th className="p-1 text-left">Consumo (Orden)</th>
+                                <th className="p-1 text-left">Método Pago</th>
+                                <th className="p-1 text-right">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {closingData.allPayments?.map((p, i) => (
+                                <tr key={i} className="border-b hover:bg-gray-100">
+                                    <td className="p-1">{new Date(p.created_at).toLocaleTimeString()}</td>
+                                    <td className="p-1 font-bold">{p.client_info}</td>
+                                    <td className="p-1 text-gray-600 italic">
+                                        {/* Aquí mostramos qué pidieron */}
+                                        {p.items_detalle && p.items_detalle.length > 0 
+                                            ? p.items_detalle.map(item => `${item.quantity} ${item.product_name}`).join(', ')
+                                            : 'Sin detalle'}
+                                    </td>
+                                    <td className="p-1 uppercase">{p.method?.replace('_', ' ')}</td>
+                                    <td className="p-1 text-right font-bold">${p.amount_usd.toFixed(2)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
             
@@ -970,7 +986,7 @@ export default function DondeManoloApp() {
             </div>
 
             <div className="grid grid-cols-2 gap-8 mb-6">
-                <div>
+                 <div>
                     <h4 className="font-bold border-b mb-2">Top Productos Vendidos</h4>
                     <table className="w-full text-xs">
                         <thead><tr><th className="text-left">Producto</th><th className="text-right">Cant. Total</th></tr></thead>
