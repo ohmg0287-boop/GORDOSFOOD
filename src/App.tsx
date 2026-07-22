@@ -40,7 +40,7 @@ export default function DondeManoloApp() {
   const [lastOrderTicket, setLastOrderTicket] = useState(null);
   const [ticketType, setTicketType] = useState('full'); 
   const [closingData, setClosingData] = useState(null);
-  const [comboBuilder, setComboBuilder] = useState(null); // NUEVO ESTADO PARA COMBOS
+  const [comboBuilder, setComboBuilder] = useState(null); // ESTADO PARA COMBOS
 
   // Reporte Global
   const [globalReportDates, setGlobalReportDates] = useState({ start: '', end: '' });
@@ -55,11 +55,13 @@ export default function DondeManoloApp() {
   // Gastos
   const [newExpense, setNewExpense] = useState({ desc: '', amount: '', category: 'Otros', isStock: false, ingredientId: '', quantity: '' });
 
+  // --- SOLUCIÓN DEL BUG DE SINCRONIZACIÓN (STALE CLOSURE) ---
   const fetchOrdersRef = useRef();
   useEffect(() => {
       fetchOrdersRef.current = fetchOrders;
   });
   
+  // Ocultar alerta de versión después de 3 seg
   useEffect(() => {
     const timer = setTimeout(() => setShowVersionAlert(false), 3000);
     return () => clearTimeout(timer);
@@ -143,6 +145,7 @@ export default function DondeManoloApp() {
     }
   };
 
+  // --- GESTIÓN DE SESIÓN ---
   const handleOpenSession = async () => {
       const base = prompt("Ingrese Monto Base en Caja ($ Efectivo):", "0");
       if (base === null) return;
@@ -216,7 +219,7 @@ export default function DondeManoloApp() {
                   ...p, 
                   client_info: ord ? ord.info : '?', 
                   created_by: ord ? ord.created_by : '?',
-                  items_detalle: ord ? ord.order_items : []
+                  items_detalle: ord ? ord.order_items : [] 
               };
           })
       };
@@ -290,7 +293,7 @@ export default function DondeManoloApp() {
 
   // --- LÓGICA DE ENVÍO DE ÓRDENES CON SOPORTE PARA COMBOS ---
   const sendOrder = async () => {
-    if (!currentSession) return alert("?? CAJA CERRADA");
+    if (!currentSession) return alert("CAJA CERRADA");
     if (processing || cart.length === 0 || !serviceInfo.val) return alert("Falta info");
     setProcessing(true); setLoading(true);
     
@@ -363,7 +366,7 @@ export default function DondeManoloApp() {
         const paymentsToSave = currentPayments.map(p => ({ order_id: selectedOrder.id, method: p.method, amount_usd: p.amount_usd, amount_bs: p.amount_bs, rate_used: tasa, cashier: user.name }));
         await supabase.from('payments').insert(paymentsToSave);
         await supabase.from('orders').update({ status: 'pagado' }).eq('id', selectedOrder.id);
-        alert("Cobrado ??"); setSelectedOrder(null); setCurrentPayments([]); fetchOrders();
+        alert("Cobrado!"); setSelectedOrder(null); setCurrentPayments([]); fetchOrders();
     } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
 
@@ -424,8 +427,10 @@ export default function DondeManoloApp() {
   const handleAddIngredient = async () => { const n = prompt("Nombre:"); if(n) { const u = prompt("Unidad:"); await supabase.from('ingredients').insert([{ name:n, unit:u, stock: 0 }]); loadData(); }};
   const handleDeleteIngredient = async (id) => { if (user.role !== 'owner') return; if (!confirm("¿Eliminar insumo?")) return; setLoading(true); await supabase.from('ingredients').delete().eq('id', id); loadData(); setLoading(false); };
   
+  // --- FUNCIONES FALTANTES PARA CREAR/ELIMINAR PLATOS ---
   const handleAddProduct = async () => { 
-      const n = prompt("Nombre del Plato:"); 
+      if (user.role !== 'owner') return alert("Solo Dueño");
+      const n = prompt("Nombre del Plato o Combo:"); 
       if(n) { 
           const p = prompt("Precio en USD:"); 
           if(p && !isNaN(p)) { 
@@ -442,11 +447,13 @@ export default function DondeManoloApp() {
           }
       }
   };
-  const handleDeleteProduct = async (id) => { 
+  
+  const handleDeleteProduct = async (id, name) => { 
       if (user.role !== 'owner') return; 
-      if (!confirm("¿Eliminar este plato del menú? Se perderá su receta.")) return; 
+      if (!confirm(`¿Eliminar ${name} del menú? Se perderá su receta asociada.`)) return; 
       setLoading(true); 
       await supabase.from('products').delete().eq('id', id); 
+      if(selectedProductRecipe === name) setSelectedProductRecipe('');
       loadData(); 
       setLoading(false); 
   };
@@ -501,9 +508,8 @@ export default function DondeManoloApp() {
         } catch (e) { alert("Error: " + e.message); } finally { setProcessing(false); setLoading(false); }
   };
 
-  // --- LÓGICA DE AGREGAR AL CARRITO INTERCEPTANDO COMBOS ---
+  // --- INTERCEPTOR DE COMBOS ---
   const addToCart = (product) => {
-      // Si el nombre del producto incluye la palabra "combo", lanzamos el constructor
       if (product.name.toLowerCase().includes('combo')) {
           setComboBuilder({ name: product.name, price: product.price_usd, children: [] });
       } else {
@@ -516,7 +522,7 @@ export default function DondeManoloApp() {
   
   if (!user) return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
-      <h1 className="text-4xl font-bold mb-8 text-yellow-500">RIKABURGUER</h1>
+      <h1 className="text-4xl font-bold mb-8 text-yellow-500">DONDE MANOLO</h1>
       <div className="grid grid-cols-2 gap-6 w-full max-w-md px-4">
         {['DUEÑO', 'GERENCIA', 'CAJA', 'MESERO'].map((role, idx) => (
           <button key={role} onClick={() => { const p = prompt(`PIN ${role}:`); if(p) login(p); }} className={`p-6 rounded-xl text-lg font-bold shadow-lg transform hover:scale-105 transition ${idx===0?'bg-yellow-600':idx===1?'bg-blue-600':idx===2?'bg-green-600':'bg-purple-600'}`}>🥩 {role}</button>
@@ -528,15 +534,16 @@ export default function DondeManoloApp() {
 
   return (
     <div className="min-h-screen pb-20 bg-gray-100 font-sans">
+      {/* ALERTA DE VERSION */}
       {showVersionAlert && (
         <div className="fixed top-0 left-0 w-full bg-green-500 text-white text-center p-2 font-bold z-[9999]">
-          SISTEMA RIKABURGUER V1.5 (SOPORTE DE COMBOS) - CARGADO OK
+          SISTEMA MANOLO V4 (CON COMBOS) - CARGADO OK
         </div>
       )}
 
       <nav className="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-lg no-print">
         <div className="flex flex-col">
-            <div className="font-bold text-lg text-yellow-400">RIKABURGUER <span className="text-xs text-gray-400">({user.role})</span></div>
+            <div className="font-bold text-lg text-yellow-400">MANOLO <span className="text-xs text-gray-400">({user.role})</span></div>
             <div className="text-xs flex items-center gap-1">
                 {currentSession ? <span className="text-green-400 flex items-center gap-1"><Unlock size={10}/> ABIERTO #{currentSession.id}</span> : <span className="text-red-500 flex items-center gap-1"><Lock size={10}/> CERRADO</span>}
             </div>
@@ -650,12 +657,12 @@ export default function DondeManoloApp() {
       {view === 'inventario' && (
             <div className="max-w-7xl mx-auto p-4 bg-white rounded shadow-lg">
                 <div className="flex justify-between items-center mb-6 no-print">
-                    <h2 className="text-2xl font-bold">Inventario y Menú</h2>
-                    <div className="flex gap-4"><button onClick={() => setInvSubView('insumos')} className={`font-bold ${invSubView==='insumos'?'text-yellow-600 border-b-2 border-yellow-600':''}`}>INSUMOS</button><button onClick={() => setInvSubView('recetas')} className={`font-bold ${invSubView==='recetas'?'text-yellow-600 border-b-2 border-yellow-600':''}`}>PLATOS Y RECETAS</button></div>
+                    <h2 className="text-2xl font-bold">Inventario</h2>
+                    <div className="flex gap-4"><button onClick={() => setInvSubView('insumos')} className={`font-bold ${invSubView==='insumos'?'text-yellow-600 border-b-2 border-yellow-600':''}`}>INSUMOS</button><button onClick={() => setInvSubView('recetas')} className={`font-bold ${invSubView==='recetas'?'text-yellow-600 border-b-2 border-yellow-600':''}`}>RECETAS</button></div>
                 </div>
                 {invSubView === 'insumos' ? (
                     <div className="overflow-x-auto">
-                        <div className="mb-4 flex justify-end"><button onClick={handleAddIngredient} className="bg-green-600 text-white px-3 py-1 rounded text-sm">+ Nuevo Insumo</button></div>
+                        <div className="mb-4 flex justify-end"><button onClick={handleAddIngredient} className="bg-green-600 text-white px-3 py-1 rounded text-sm">+ Nuevo</button></div>
                         <table className="w-full text-left">
                             <thead><tr className="bg-gray-100"><th className="p-2">Item</th><th className="p-2">Stock</th><th className="p-2">Und</th>{user.role === 'owner' && <th className="p-2 no-print">Acciones</th>}</tr></thead>
                             <tbody>{ingredients.map(ing => (
@@ -670,20 +677,21 @@ export default function DondeManoloApp() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* AQUI ESTÁ LA SOLUCIÓN 1: BOTON Y BOTONES DE ELIMINAR */}
                         <div className="border-r pr-4 max-h-[60vh] overflow-y-auto">
                             {user.role === 'owner' && (
-                                <div className="mb-3">
-                                    <button onClick={handleAddProduct} className="w-full bg-green-600 text-white p-2 rounded text-sm font-bold shadow hover:bg-green-700">+ Crear Nuevo Plato</button>
-                                </div>
+                                <button onClick={handleAddProduct} className="w-full bg-green-600 text-white p-2 rounded mb-4 font-bold shadow hover:bg-green-700">+ Nuevo Plato o Combo</button>
                             )}
                             {products.map(p => (
-                                <div key={p.id} className={`flex justify-between items-center w-full text-left p-2 rounded text-sm mb-1 ${selectedProductRecipe === p.name ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 bg-gray-50'}`}>
-                                    <button onClick={() => setSelectedProductRecipe(p.name)} className="flex-1 text-left font-bold">{p.name} <span className={`ml-2 font-bold ${selectedProductRecipe === p.name ? 'text-blue-200' : 'text-green-600'}`}>${p.price_usd}</span></button>
-                                    {user.role === 'owner' && <button onClick={() => handleDeleteProduct(p.id)} className={`p-1 rounded ${selectedProductRecipe === p.name ? 'text-white hover:text-red-300' : 'text-red-500 hover:bg-red-100'}`}><Trash2 size={14}/></button>}
+                                <div key={p.id} className={`flex justify-between items-center p-2 rounded mb-1 ${selectedProductRecipe === p.name ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}>
+                                    <button onClick={() => setSelectedProductRecipe(p.name)} className="text-sm text-left flex-1 font-bold">{p.name}</button>
+                                    {user.role === 'owner' && (
+                                        <button onClick={() => handleDeleteProduct(p.id, p.name)} className="text-red-300 hover:text-red-600 ml-2"><Trash2 size={16}/></button>
+                                    )}
                                 </div>
                             ))}
                         </div>
-                        <div className="md:col-span-2">{selectedProductRecipe ? (<><h3 className="font-bold mb-4">Receta de: <span className="text-blue-600">{selectedProductRecipe}</span></h3><div className="bg-gray-50 p-2 rounded mb-4 flex gap-2"><select className="flex-1 border p-1" value={newRecipeEntry.ingredientId} onChange={e => setNewRecipeEntry({...newRecipeEntry, ingredientId: e.target.value})}>{ingredients.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select><input type="number" className="w-20 border p-1" value={newRecipeEntry.quantity} onChange={e => setNewRecipeEntry({...newRecipeEntry, quantity: e.target.value})} /><button onClick={handleAddIngredientToRecipe} className="bg-blue-600 text-white p-1 rounded"><PlusCircle/></button></div><table className="w-full text-sm"><tbody>{(recipes[selectedProductRecipe] || []).map(rItem => { const ing = ingredients.find(i => i.id === rItem.ingredientId); return (<tr key={rItem.id} className="border-b"><td className="py-2">{ing?.name}</td><td>{rItem.quantity} {ing?.unit}</td><td className="text-right"><button onClick={() => handleRemoveRecipeItem(rItem.id)} className="text-red-400"><Trash2 size={16}/></button></td></tr>) })}</tbody></table></>) : <div className="text-gray-400 italic">Selecciona un plato para ver o editar su receta</div>}</div>
+                        <div className="md:col-span-2">{selectedProductRecipe ? (<><h3 className="font-bold mb-4">Receta: <span className="text-blue-600">{selectedProductRecipe}</span></h3><div className="bg-gray-50 p-2 rounded mb-4 flex gap-2"><select className="flex-1 border p-1" value={newRecipeEntry.ingredientId} onChange={e => setNewRecipeEntry({...newRecipeEntry, ingredientId: e.target.value})}><option value="">Seleccione Insumo...</option>{ingredients.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select><input type="number" className="w-20 border p-1" value={newRecipeEntry.quantity} onChange={e => setNewRecipeEntry({...newRecipeEntry, quantity: e.target.value})} /><button onClick={handleAddIngredientToRecipe} className="bg-blue-600 text-white p-1 rounded"><PlusCircle/></button></div><table className="w-full text-sm"><tbody>{(recipes[selectedProductRecipe] || []).map(rItem => { const ing = ingredients.find(i => i.id === rItem.ingredientId); return (<tr key={rItem.id} className="border-b"><td className="py-2">{ing?.name}</td><td>{rItem.quantity} {ing?.unit}</td><td className="text-right"><button onClick={() => handleRemoveRecipeItem(rItem.id)} className="text-red-400"><Trash2 size={16}/></button></td></tr>) })}</tbody></table></>) : <div className="text-gray-400 italic">Selecciona un plato para editar su receta</div>}</div>
                     </div>
                 )}
             </div>
@@ -695,10 +703,8 @@ export default function DondeManoloApp() {
                   <h2 className="font-bold text-xl mb-4">Menú</h2>
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                       {products.map(p => (
-                          <div key={p.id} onClick={() => addToCart(p)} className={`cursor-pointer border p-4 rounded-lg transition transform hover:scale-105 ${p.name.toLowerCase().includes('combo') ? 'border-indigo-500 bg-indigo-50 hover:bg-indigo-100' : 'hover:border-yellow-500 bg-gray-50 hover:bg-yellow-50'}`}>
-                              <h3 className="font-bold text-gray-800">{p.name}</h3>
-                              <p className="text-green-600 font-bold">${p.price_usd}</p>
-                              {p.name.toLowerCase().includes('combo') && <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded font-bold mt-2 inline-block">🎁 ARMAR</span>}
+                          <div key={p.id} onClick={() => addToCart(p)} className="cursor-pointer border hover:border-yellow-500 p-4 rounded-lg bg-gray-50 hover:bg-yellow-50 transition transform hover:scale-105">
+                              <h3 className="font-bold text-gray-800">{p.name}</h3><p className="text-green-600 font-bold">${p.price_usd}</p>
                           </div>
                       ))}
                   </div>
@@ -706,25 +712,25 @@ export default function DondeManoloApp() {
               <div className="bg-white p-4 rounded shadow-lg flex flex-col h-full">
                   <h2 className="font-bold text-xl mb-2">Comanda</h2>
                   <div className="flex gap-2 mb-4"><select className="border p-2 rounded" onChange={e => setServiceInfo({...serviceInfo, type: e.target.value})}><option>Mesa</option><option>Para Llevar</option><option>Delivery</option></select><input placeholder="Cliente/Mesa" className="border p-2 rounded w-full" onChange={e => setServiceInfo({...serviceInfo, val: e.target.value})} value={serviceInfo.val} /></div>
+                  
+                  {/* AQUÍ SE RENDERIZA EL CARRITO CON LA LECTURA DE COMBOS */}
                   <div className="flex-1 overflow-y-auto border-t py-2">
                       {cart.map(item => (
                           <div key={item.tempId} className="flex justify-between border-b py-2 text-sm">
-                              <div className="w-full pr-2">
-                                  <span className="font-bold">{item.name}</span> 
-                                  <div className="text-xs text-gray-500">${item.price_usd}</div>
-                                  
+                              <div className="w-full">
+                                  <span className="font-bold">{item.name}</span> <div className="text-xs text-gray-500">${item.price_usd}</div>
                                   {item.isCombo && item.children && (
-                                      <div className="mt-1 mb-1 border-l-2 border-yellow-500 pl-2">
-                                          {item.children.map((c, i) => <div key={i} className="text-xs text-blue-700">↳ {c.name}</div>)}
+                                      <div className="text-xs text-blue-600 ml-2 mt-1">
+                                          {item.children.map((c, i) => <div key={i}>- {c.name}</div>)}
                                       </div>
                                   )}
-                                  
                                   <input placeholder="Notas..." className="text-xs border-b w-full mt-1 bg-transparent" value={item.notes || ''} onChange={e => updateCartNote(item.tempId, e.target.value)} />
                               </div>
-                              <button onClick={() => removeFromCart(item.tempId)} className="text-red-500"><Trash2 size={16}/></button>
+                              <button onClick={() => removeFromCart(item.tempId)} className="text-red-500 ml-2"><Trash2 size={16}/></button>
                           </div>
                       ))}
                   </div>
+
                   <div className="pt-4 border-t"><button onClick={sendOrder} disabled={!currentSession} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold text-lg disabled:bg-gray-400">{!currentSession ? 'CAJA CERRADA' : 'ENVIAR A COCINA'}</button></div>
               </div>
           </div>
@@ -735,9 +741,9 @@ export default function DondeManoloApp() {
               {orders.filter(o => o.status === 'pendiente').map(o => (
                   <div key={o.id} className="bg-white rounded-lg shadow-md overflow-hidden border-l-8 border-yellow-500">
                       <div className="bg-yellow-50 p-3 border-b border-yellow-100 flex justify-between items-center"><span className="font-bold text-lg text-gray-800">{o.service_type}</span><span className="text-sm font-bold bg-white px-2 rounded border">{o.info}</span></div>
-                      <div className="p-4"><ul className="space-y-3">{o.order_items.map(item => (<li key={item.id} className="text-gray-800 leading-tight"><div className={`font-bold ${item.product_name.startsWith('↳') ? 'text-md ml-4 text-blue-800' : 'text-lg'}`}>• {item.product_name}</div>{item.notes && <div className="text-red-600 text-sm bg-red-50 p-1 rounded mt-1">?? {item.notes}</div>}</li>))}</ul></div>
+                      <div className="p-4"><ul className="space-y-3">{o.order_items.map(item => (<li key={item.id} className="text-gray-800 leading-tight"><div className="font-bold text-lg">• {item.product_name}</div>{item.notes && <div className="text-red-600 text-sm bg-red-50 p-1 rounded mt-1">📝 {item.notes}</div>}</li>))}</ul></div>
                       <div className="flex">
-                         <button onClick={async () => { await supabase.from('orders').update({status:'listo'}).eq('id', o.id); fetchOrders(); }} className="flex-1 bg-green-600 text-white font-bold py-3 hover:bg-green-700">MARCAR LISTO ?</button>
+                         <button onClick={async () => { await supabase.from('orders').update({status:'listo'}).eq('id', o.id); fetchOrders(); }} className="flex-1 bg-green-600 text-white font-bold py-3 hover:bg-green-700">MARCAR LISTO ✔️</button>
                          <button onClick={() => { setTicketType('full'); setLastOrderTicket(o); setTimeout(()=>window.print(), 200); }} className="bg-gray-700 text-white px-4"><Printer size={20}/></button>
                       </div>
                   </div>
@@ -766,8 +772,8 @@ export default function DondeManoloApp() {
               {selectedOrder && (
                   <div className="bg-white p-6 rounded shadow-lg h-fit sticky top-20">
                       <div className="flex justify-between border-b pb-2 mb-4">
-                           {(['owner', 'manager', 'caja'].includes(user.role)) && (<button onClick={() => setIsEditingOrder(false)} className={`flex-1 py-2 font-bold ${!isEditingOrder ? 'border-b-4 border-blue-600 text-blue-800' : 'text-gray-400'}`}>?? COBRAR</button>)}
-                           <button onClick={() => setIsEditingOrder(true)} className={`flex-1 py-2 font-bold ${isEditingOrder ? 'border-b-4 border-yellow-500 text-yellow-800' : 'text-gray-400'}`}>?? EDITAR</button>
+                           {(['owner', 'manager', 'caja'].includes(user.role)) && (<button onClick={() => setIsEditingOrder(false)} className={`flex-1 py-2 font-bold ${!isEditingOrder ? 'border-b-4 border-blue-600 text-blue-800' : 'text-gray-400'}`}>💵 COBRAR</button>)}
+                           <button onClick={() => setIsEditingOrder(true)} className={`flex-1 py-2 font-bold ${isEditingOrder ? 'border-b-4 border-yellow-500 text-yellow-800' : 'text-gray-400'}`}>✏️ EDITAR</button>
                       </div>
                       {!isEditingOrder ? (
                           <>
@@ -787,7 +793,7 @@ export default function DondeManoloApp() {
                                           </div>
                                       ) : (
                                           <div className="text-green-600 font-bold text-xl flex items-center justify-center gap-2">
-                                              <div className="bg-green-100 p-2 rounded-full">??</div> LISTO PARA FACTURAR
+                                              <div className="bg-green-100 p-2 rounded-full">✔️</div> LISTO PARA FACTURAR
                                           </div>
                                       );
                                   })()}
@@ -796,7 +802,7 @@ export default function DondeManoloApp() {
                                   <button onClick={() => handleAddExtraToOrder('delivery')} className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-sm font-bold flex items-center gap-1 hover:bg-purple-200"><Bike size={16}/> + DELIVERY</button>
                                   <button onClick={() => handleAddExtraToOrder('propina')} className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded text-sm font-bold flex items-center gap-1 hover:bg-yellow-200"><Coins size={16}/> + PROPINA</button>
                               </div>
-                              <div className="mb-6"><div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option>{['owner', 'manager'].includes(user.role) && (<><option value="obsequio">?? OBSEQUIO</option><option value="personal">????? CONSUMO PERSONAL</option></>)}</select></div><button disabled={processing || !currentSession} onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">Agregar Pago</button></div>
+                              <div className="mb-6"><div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option>{['owner', 'manager'].includes(user.role) && (<><option value="obsequio">🎁 OBSEQUIO</option><option value="personal">🧑‍🍳 CONSUMO PERSONAL</option></>)}</select></div><button disabled={processing || !currentSession} onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">Agregar Pago</button></div>
                               <div className="space-y-2 mb-6">{currentPayments.map((p, i) => (<div key={i} className="flex justify-between border-b pb-1 text-sm items-center"><span>{p.method}</span><div className="flex items-center gap-2"><span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span><button onClick={() => {const newP = [...currentPayments]; newP.splice(i, 1); setCurrentPayments(newP);}} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16}/></button></div></div>))}</div>
                               <div className="border-t pt-4"><button onClick={handlePayment} disabled={processing || !currentSession} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700 disabled:opacity-50 disabled:bg-gray-400">{!currentSession ? 'CAJA CERRADA' : 'FINALIZAR VENTA'}</button></div>
                           </>
@@ -811,63 +817,60 @@ export default function DondeManoloApp() {
           </div>
       )}
 
-      {/* MODAL PARA CONSTRUIR EL COMBO */}
+      {/* --- AQUÍ ESTÁ LA SOLUCIÓN 2: VENTANA EMERGENTE PARA ARMAR COMBOS --- */}
       {comboBuilder && (
-          <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center p-4 no-print">
-              <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl flex flex-col h-[80vh]">
-                  <div className="p-4 border-b flex justify-between items-center bg-indigo-600 text-white rounded-t-lg">
-                      <h2 className="font-bold text-xl">Configurar: {comboBuilder.name}</h2>
-                      <button onClick={() => setComboBuilder(null)} className="hover:text-red-200"><XCircle size={24}/></button>
+          <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center no-print">
+              <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-2xl">
+                  <h2 className="font-bold text-xl mb-4 border-b pb-2">Armar {comboBuilder.name}</h2>
+                  
+                  <div className="mb-4">
+                      <label className="text-sm font-bold text-gray-700">Seleccionar componentes del combo:</label>
+                      <div className="grid grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto p-2 border bg-gray-50 rounded">
+                          {/* Muestra todos los productos que NO sean un combo en sí para meterlos dentro */}
+                          {products.filter(p => !p.name.toLowerCase().includes('combo')).map(p => (
+                              <button 
+                                  key={p.id} 
+                                  onClick={() => setComboBuilder({...comboBuilder, children: [...comboBuilder.children, p]})} 
+                                  className="text-xs p-2 bg-white border rounded hover:border-yellow-500 hover:bg-yellow-50 text-left"
+                              >
+                                  {p.name}
+                              </button>
+                          ))}
+                      </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 flex flex-col md:flex-row gap-4">
-                      <div className="w-full md:w-1/2 md:border-r pr-4">
-                          <h3 className="font-bold mb-3 text-gray-700">1. Seleccionar productos (Opciones)</h3>
-                          <div className="grid grid-cols-2 gap-2 h-64 md:h-auto overflow-y-auto">
-                              {products.filter(p => !p.name.toLowerCase().includes('combo')).map(p => (
-                                  <button key={p.id} onClick={() => setComboBuilder(prev => ({...prev, children: [...prev.children, p]}))} className="p-2 border rounded hover:bg-yellow-50 hover:border-yellow-500 text-left text-sm transition">
-                                      <div className="font-bold">{p.name}</div>
-                                  </button>
-                              ))}
+
+                  <div className="mb-4 min-h-[60px] p-2 border rounded bg-gray-100">
+                      <h4 className="font-bold text-sm mb-2">Componentes seleccionados:</h4>
+                      {comboBuilder.children.length === 0 && <p className="text-xs text-gray-500 italic">No has agregado nada al combo...</p>}
+                      {comboBuilder.children.map((c, i) => (
+                          <div key={i} className="flex justify-between items-center text-sm border-b py-1">
+                              <span>- {c.name}</span>
+                              <button onClick={() => { 
+                                  const newC = [...comboBuilder.children]; 
+                                  newC.splice(i,1); 
+                                  setComboBuilder({...comboBuilder, children: newC}) 
+                              }} className="text-red-500 hover:bg-red-100 p-1 rounded"><XCircle size={14}/></button>
                           </div>
-                      </div>
-                      <div className="w-full md:w-1/2">
-                          <h3 className="font-bold mb-3 text-gray-700">2. Contenido del Combo</h3>
-                          {comboBuilder.children.length === 0 ? <p className="text-gray-400 text-sm italic">Haz clic en los productos de la izquierda para agregarlos al combo. Esto descontará los insumos del inventario.</p> : (
-                              <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-2">
-                                  {comboBuilder.children.map((child, idx) => (
-                                      <div key={idx} className="flex justify-between items-center p-2 bg-blue-50 border border-blue-100 rounded text-sm">
-                                          <span className="font-bold text-blue-900">{child.name}</span>
-                                          <button onClick={() => {
-                                              const newChildren = [...comboBuilder.children];
-                                              newChildren.splice(idx, 1);
-                                              setComboBuilder(prev => ({...prev, children: newChildren}));
-                                          }} className="text-red-500 hover:bg-red-100 p-1 rounded"><Trash2 size={16}/></button>
-                                      </div>
-                                  ))}
-                              </div>
-                          )}
-                      </div>
+                      ))}
                   </div>
-                  <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
-                      <button onClick={() => setComboBuilder(null)} className="px-6 py-2 bg-gray-300 rounded font-bold hover:bg-gray-400">Cancelar</button>
-                      <button onClick={() => {
-                          if (comboBuilder.children.length === 0 && !confirm("¿Agregar este combo sin productos internos? No descontará inventario de comida.")) return;
-                          setCart(prev => [...prev, {
-                              name: comboBuilder.name,
-                              price_usd: comboBuilder.price,
-                              tempId: Date.now() + Math.random(),
-                              isCombo: true,
-                              children: comboBuilder.children
-                          }]);
-                          setComboBuilder(null);
-                      }} className="px-6 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700 shadow">
-                          Añadir a Comanda
+
+                  <div className="flex gap-2 pt-2">
+                      <button 
+                          onClick={() => { 
+                              setCart(prev => [...prev, { name: comboBuilder.name, price_usd: comboBuilder.price, tempId: Date.now() + Math.random(), isCombo: true, children: comboBuilder.children }]); 
+                              setComboBuilder(null); 
+                          }} 
+                          className="flex-1 bg-green-600 text-white p-3 rounded font-bold hover:bg-green-700"
+                      >
+                          Agregar Combo a Comanda
                       </button>
+                      <button onClick={() => setComboBuilder(null)} className="w-1/3 bg-gray-400 text-white p-3 rounded font-bold hover:bg-gray-500">Cancelar</button>
                   </div>
               </div>
           </div>
       )}
 
+      {/* --- TICKETS DE IMPRESIÓN --- */}
       {lastOrderTicket && !closingData && (
         <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center no-print">
             <div className="bg-white p-4 w-80 text-black font-mono text-sm shadow-2xl rounded-lg">
@@ -881,7 +884,8 @@ export default function DondeManoloApp() {
 
       {lastOrderTicket && !closingData && (
         <div id="ticket-impresion">
-          <div className="ticket-centrado ticket-grande">RIKABURGUER</div>
+          <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
+          <div className="ticket-centrado">M&F</div>
           <div className="ticket-linea"></div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>{new Date().toLocaleDateString()}</span><span>{new Date().toLocaleTimeString()}</span></div>
           <div className="ticket-negrita" style={{ marginTop: '5px' }}>{lastOrderTicket.service_type}: {lastOrderTicket.info}</div>
@@ -898,6 +902,7 @@ export default function DondeManoloApp() {
         </div>
       )}
 
+    {/* --- DOCUMENTO DE CIERRE DETALLADO --- */}
     {closingData && !closingData.isGlobal && (
         <div id="cierre-impresion" className="p-8 font-sans bg-white relative">
             <div className="no-print absolute top-0 right-0 p-4">
@@ -906,8 +911,8 @@ export default function DondeManoloApp() {
             
             <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
                 <div>
-                    <h1 className="text-3xl font-bold">REPORTE DETALLADO</h1>
-                    <p className="text-gray-600">Rikaburguer - Control de Caja</p>
+                    <h1 className="text-3xl font-bold">REPORTE DETALLADO (V4)</h1>
+                    <p className="text-gray-600">Donde Manolo - Control de Caja</p>
                     <p className="text-sm font-bold mt-2 bg-yellow-100 inline-block px-2 border border-yellow-300">
                         Tasa de Cambio: {closingData.tasa_calculo} Bs/$
                     </p>
@@ -1012,7 +1017,7 @@ export default function DondeManoloApp() {
             </div>
             
             <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
-                <div><h1 className="text-3xl font-bold">REPORTE CONSOLIDADO GLOBAL</h1><p className="text-gray-600">Rikaburguer - Gerencia</p></div>
+                <div><h1 className="text-3xl font-bold">REPORTE CONSOLIDADO GLOBAL</h1><p className="text-gray-600">Donde Manolo - Gerencia</p></div>
                 <div className="text-right text-sm"><p><strong>Desde:</strong> {closingData.startDate}</p><p><strong>Hasta:</strong> {closingData.endDate}</p><p><strong>Turnos Auditados:</strong> {closingData.sessionsCount}</p></div>
             </div>
 
