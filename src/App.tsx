@@ -522,12 +522,12 @@ export default function DondeManoloApp() {
   
   if (!user) return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
-      <h1 className="text-4xl font-bold mb-8 text-yellow-500">DONDE MANOLO</h1>
+      <h1 className="text-4xl font-bold mb-8 text-yellow-500">GORDOS FOOD</h1>
       <div className="grid grid-cols-2 gap-6 w-full max-w-md px-4">
         {['DUEÑO', 'GERENCIA', 'CAJA', 'MESERO'].map((role, idx) => (
-          <button key={role} onClick={() => { const p = prompt(`PIN ${role}:`); if(p) login(p); }} className={`p-6 rounded-xl text-lg font-bold shadow-lg transform hover:scale-105 transition ${idx===0?'bg-yellow-600':idx===1?'bg-blue-600':idx===2?'bg-green-600':'bg-purple-600'}`}>🥩 {role}</button>
+          <button key={role} onClick={() => { const p = prompt(`PIN ${role}:`); if(p) login(p); }} className={`p-6 rounded-xl text-lg font-bold shadow-lg transform hover:scale-105 transition ${idx===0?'bg-yellow-600':idx===1?'bg-blue-600':idx===2?'bg-green-600':'bg-purple-600'}`}> {role}</button>
         ))}
-        <button onClick={() => { const p = prompt("PIN Cocina:"); if(p) login(p); }} className="col-span-2 p-4 bg-gray-700 rounded-xl font-bold border border-gray-500">🍔 COCINA</button>
+        <button onClick={() => { const p = prompt("PIN Cocina:"); if(p) login(p); }} className="col-span-2 p-4 bg-gray-700 rounded-xl font-bold border border-gray-500"> COCINA</button>
       </div>
     </div>
   );
@@ -537,13 +537,13 @@ export default function DondeManoloApp() {
       {/* ALERTA DE VERSION */}
       {showVersionAlert && (
         <div className="fixed top-0 left-0 w-full bg-green-500 text-white text-center p-2 font-bold z-[9999]">
-          SISTEMA MANOLO V4 (CON COMBOS) - CARGADO OK
+          SISTEMA GORDOS FOOD
         </div>
       )}
 
       <nav className="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-lg no-print">
         <div className="flex flex-col">
-            <div className="font-bold text-lg text-yellow-400">MANOLO <span className="text-xs text-gray-400">({user.role})</span></div>
+            <div className="font-bold text-lg text-yellow-400">GORDOS <span className="text-xs text-gray-400">({user.role})</span></div>
             <div className="text-xs flex items-center gap-1">
                 {currentSession ? <span className="text-green-400 flex items-center gap-1"><Unlock size={10}/> ABIERTO #{currentSession.id}</span> : <span className="text-red-500 flex items-center gap-1"><Lock size={10}/> CERRADO</span>}
             </div>
@@ -802,7 +802,7 @@ export default function DondeManoloApp() {
                                   <button onClick={() => handleAddExtraToOrder('delivery')} className="px-3 py-1 bg-purple-100 text-purple-700 rounded text-sm font-bold flex items-center gap-1 hover:bg-purple-200"><Bike size={16}/> + DELIVERY</button>
                                   <button onClick={() => handleAddExtraToOrder('propina')} className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded text-sm font-bold flex items-center gap-1 hover:bg-yellow-200"><Coins size={16}/> + PROPINA</button>
                               </div>
-                              <div className="mb-6"><div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option>{['owner', 'manager'].includes(user.role) && (<><option value="obsequio">🎁 OBSEQUIO</option><option value="personal">🧑‍🍳 CONSUMO PERSONAL</option></>)}</select></div><button disabled={processing || !currentSession} onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">Agregar Pago</button></div>
+                              <div className="mb-6"><div className="flex gap-2 mb-2"><input type="number" placeholder="Monto" className="border p-2 rounded flex-1 text-lg" value={payAmount} onChange={e => setPayAmount(e.target.value)} /><select className="border p-2 rounded bg-white" value={payMethod} onChange={e => setPayMethod(e.target.value)}><option value="usd_efectivo">$ Efectivo</option><option value="bs_efectivo">Bs Efectivo</option><option value="pago_movil">Pago Móvil</option><option value="punto">Punto</option><option value="zelle">Zelle</option><option value="BINANCE">BINANCE</option>{['owner', 'manager'].includes(user.role) && (<><option value="obsequio">🎁 OBSEQUIO</option><option value="personal">🧑‍🍳 CONSUMO PERSONAL</option></>)}</select></div><button disabled={processing || !currentSession} onClick={() => { const val = parseFloat(payAmount); if (!val) return; const isBs = payMethod.startsWith('bs') || payMethod === 'pago_movil' || payMethod === 'punto'; const usdEquiv = isBs ? val / tasa : val; setCurrentPayments([...currentPayments, { method: payMethod, amount_usd: usdEquiv, amount_bs: isBs ? val : 0 }]); setPayAmount(''); }} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">Agregar Pago</button></div>
                               <div className="space-y-2 mb-6">{currentPayments.map((p, i) => (<div key={i} className="flex justify-between border-b pb-1 text-sm items-center"><span>{p.method}</span><div className="flex items-center gap-2"><span>${p.amount_usd.toFixed(2)} {p.amount_bs > 0 && `(Bs ${p.amount_bs})`}</span><button onClick={() => {const newP = [...currentPayments]; newP.splice(i, 1); setCurrentPayments(newP);}} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={16}/></button></div></div>))}</div>
                               <div className="border-t pt-4"><button onClick={handlePayment} disabled={processing || !currentSession} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-green-700 disabled:opacity-50 disabled:bg-gray-400">{!currentSession ? 'CAJA CERRADA' : 'FINALIZAR VENTA'}</button></div>
                           </>
@@ -817,7 +817,7 @@ export default function DondeManoloApp() {
           </div>
       )}
 
-      {/* --- AQUÍ ESTÁ LA SOLUCIÓN 2: VENTANA EMERGENTE PARA ARMAR COMBOS --- */}
+      {/* ---  VENTANA EMERGENTE PARA ARMAR COMBOS --- */}
       {comboBuilder && (
           <div className="fixed inset-0 bg-black bg-opacity-80 z-[100] flex items-center justify-center no-print">
               <div className="bg-white p-6 rounded-lg w-full max-w-md shadow-2xl">
@@ -884,7 +884,7 @@ export default function DondeManoloApp() {
 
       {lastOrderTicket && !closingData && (
         <div id="ticket-impresion">
-          <div className="ticket-centrado ticket-grande">DONDE MANOLO</div>
+          <div className="ticket-centrado ticket-grande">GORDOS FOOD</div>
           <div className="ticket-centrado">M&F</div>
           <div className="ticket-linea"></div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>{new Date().toLocaleDateString()}</span><span>{new Date().toLocaleTimeString()}</span></div>
@@ -912,7 +912,7 @@ export default function DondeManoloApp() {
             <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
                 <div>
                     <h1 className="text-3xl font-bold">REPORTE DETALLADO (V4)</h1>
-                    <p className="text-gray-600">Donde Manolo - Control de Caja</p>
+                    <p className="text-gray-600">Gordos food - Control de Caja</p>
                     <p className="text-sm font-bold mt-2 bg-yellow-100 inline-block px-2 border border-yellow-300">
                         Tasa de Cambio: {closingData.tasa_calculo} Bs/$
                     </p>
@@ -957,7 +957,7 @@ export default function DondeManoloApp() {
             </div>
 
             <div className="mb-6 border-2 border-black p-4 rounded bg-white">
-                <h3 className="font-bold text-center text-xl mb-4">💰 ARQUEO DE EFECTIVO</h3>
+                <h3 className="font-bold text-center text-xl mb-4">ARQUEO DE EFECTIVO</h3>
                 <div className="flex justify-around text-center">
                     <div><div className="text-sm text-gray-500">EFECTIVO USD (Inc. Base)</div><div className="text-4xl font-bold">${closingData.cashInUsd.toFixed(2)}</div></div>
                     <div><div className="text-sm text-gray-500">EFECTIVO BOLIVARES</div><div className="text-4xl font-bold">Bs {closingData.cashInBs.toFixed(2)}</div></div>
@@ -966,7 +966,7 @@ export default function DondeManoloApp() {
             
             {user.role === 'owner' && (
                 <div className="mt-8 border-t-4 border-black pt-4 page-break">
-                    <h2 className="text-2xl font-bold mb-4 text-center bg-black text-white py-1">DETALLE CONFIDENCIAL (DUEÑO)</h2>
+                    <h2 className="text-2xl font-bold mb-4 text-center bg-black text-white py-1">DETALLE</h2>
                     
                     <div className="grid grid-cols-2 gap-8 mb-6">
                          <div><h4 className="font-bold border-b mb-2">Ranking Productos</h4><table className="w-full text-xs"><thead><tr><th className="text-left">Producto</th><th className="text-right">Cant.</th></tr></thead><tbody>{Object.entries(closingData.productCount).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold">{qty}</td></tr>))}</tbody></table></div>
@@ -1017,12 +1017,12 @@ export default function DondeManoloApp() {
             </div>
             
             <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
-                <div><h1 className="text-3xl font-bold">REPORTE CONSOLIDADO GLOBAL</h1><p className="text-gray-600">Donde Manolo - Gerencia</p></div>
+                <div><h1 className="text-3xl font-bold">REPORTE GLOBAL</h1><p className="text-gray-600">GORDOS FOOD HAMBURGUESAS</p></div>
                 <div className="text-right text-sm"><p><strong>Desde:</strong> {closingData.startDate}</p><p><strong>Hasta:</strong> {closingData.endDate}</p><p><strong>Turnos Auditados:</strong> {closingData.sessionsCount}</p></div>
             </div>
 
             <div className="mb-6 border rounded p-4 bg-gray-50">
-                <h3 className="font-bold text-lg mb-2 border-b border-gray-300">BALANCE CONSOLIDADO</h3>
+                <h3 className="font-bold text-lg mb-2 border-b border-gray-300">BALANCE</h3>
                 <div className="grid grid-cols-2 gap-4 text-lg">
                     <div>Ventas Totales: <span className="font-bold text-green-700">${closingData.sales.toFixed(2)}</span></div>
                     <div>Gastos Totales: <span className="font-bold text-red-600">${closingData.expenses.toFixed(2)}</span></div>
@@ -1040,7 +1040,7 @@ export default function DondeManoloApp() {
 
             <div className="grid grid-cols-2 gap-8 mb-6">
                  <div>
-                    <h4 className="font-bold border-b mb-2">Top Productos Vendidos</h4>
+                    <h4 className="font-bold border-b mb-2">Productos Vendidos</h4>
                     <table className="w-full text-xs">
                         <thead><tr><th className="text-left">Producto</th><th className="text-right">Cant. Total</th></tr></thead>
                         <tbody>{Object.entries(closingData.productCount).sort((a,b)=>b[1]-a[1]).map(([name, qty]) => (<tr key={name} className="border-b"><td>{name}</td><td className="text-right font-bold text-indigo-700">{qty}</td></tr>))}</tbody>
