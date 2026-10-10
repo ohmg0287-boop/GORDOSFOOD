@@ -522,7 +522,7 @@ export default function DondeManoloApp() {
   
   if (!user) return (
     <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white">
-      <h1 className="text-4xl font-bold mb-8 text-yellow-500">GORDOS FOOD</h1>
+      <h1 className="text-4xl font-bold mb-8 text-yellow-500">ZAYLY DELGADO</h1>
       <div className="grid grid-cols-2 gap-6 w-full max-w-md px-4">
         {['DUEÑO', 'GERENCIA', 'CAJA', 'MESERO'].map((role, idx) => (
           <button key={role} onClick={() => { const p = prompt(`PIN ${role}:`); if(p) login(p); }} className={`p-6 rounded-xl text-lg font-bold shadow-lg transform hover:scale-105 transition ${idx===0?'bg-yellow-600':idx===1?'bg-blue-600':idx===2?'bg-green-600':'bg-purple-600'}`}> {role}</button>
@@ -537,13 +537,13 @@ export default function DondeManoloApp() {
       {/* ALERTA DE VERSION */}
       {showVersionAlert && (
         <div className="fixed top-0 left-0 w-full bg-green-500 text-white text-center p-2 font-bold z-[9999]">
-          SISTEMA GORDOS FOOD
+          SISTEMA ZAYLY DELGADO
         </div>
       )}
 
       <nav className="bg-gray-900 text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-lg no-print">
         <div className="flex flex-col">
-            <div className="font-bold text-lg text-yellow-400">GORDOS <span className="text-xs text-gray-400">({user.role})</span></div>
+            <div className="font-bold text-lg text-yellow-400">ZAILY <span className="text-xs text-gray-400">({user.role})</span></div>
             <div className="text-xs flex items-center gap-1">
                 {currentSession ? <span className="text-green-400 flex items-center gap-1"><Unlock size={10}/> ABIERTO #{currentSession.id}</span> : <span className="text-red-500 flex items-center gap-1"><Lock size={10}/> CERRADO</span>}
             </div>
@@ -884,7 +884,7 @@ export default function DondeManoloApp() {
 
       {lastOrderTicket && !closingData && (
         <div id="ticket-impresion">
-          <div className="ticket-centrado ticket-grande">GORDOS FOOD</div>
+          <div className="ticket-centrado ticket-grande">ZAYLY DELGADO</div>
           <div className="ticket-centrado">M&F</div>
           <div className="ticket-linea"></div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>{new Date().toLocaleDateString()}</span><span>{new Date().toLocaleTimeString()}</span></div>
@@ -912,7 +912,7 @@ export default function DondeManoloApp() {
             <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
                 <div>
                     <h1 className="text-3xl font-bold">REPORTE DETALLADO (V4)</h1>
-                    <p className="text-gray-600">Gordos food - Control de Caja</p>
+                    <p className="text-gray-600">Zayly delgado - Control de Caja</p>
                     <p className="text-sm font-bold mt-2 bg-yellow-100 inline-block px-2 border border-yellow-300">
                         Tasa de Cambio: {closingData.tasa_calculo} Bs/$
                     </p>
@@ -1017,7 +1017,7 @@ export default function DondeManoloApp() {
             </div>
             
             <div className="border-b-2 border-black pb-4 mb-6 flex justify-between mt-8">
-                <div><h1 className="text-3xl font-bold">REPORTE GLOBAL</h1><p className="text-gray-600">GORDOS FOOD HAMBURGUESAS</p></div>
+                <div><h1 className="text-3xl font-bold">REPORTE GLOBAL</h1><p className="text-gray-600">ZAYLY DELGADO</p></div>
                 <div className="text-right text-sm"><p><strong>Desde:</strong> {closingData.startDate}</p><p><strong>Hasta:</strong> {closingData.endDate}</p><p><strong>Turnos Auditados:</strong> {closingData.sessionsCount}</p></div>
             </div>
 
